@@ -196,12 +196,25 @@ class ACVSCore:
     def load_manifest(self):
         if os.path.exists(self.manifest_path):
             with open(self.manifest_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # 新仕様（_meta入り）か、旧仕様（直下state）かを吸収する
+                if "_meta" in data and "state" in data:
+                    return data["state"]
+                return data
         return {}
 
     def save_manifest(self, state):
+        # マニフェストファイルにもバージョン情報を付加する
+        manifest_data = {
+            "_meta": {
+                "generator": "ACF-VS",
+                "schema_version": "1.0",
+                "updated_at": datetime.now().strftime("%Y%m%d_%H%M%S")
+            },
+            "state": state
+        }
         with open(self.manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(state, f, indent=4, ensure_ascii=False)
+            json.dump(manifest_data, f, indent=4, ensure_ascii=False)
 
     def init(self):
         if os.path.exists(self.manifest_path):

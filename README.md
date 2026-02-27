@@ -125,6 +125,7 @@ ACF-VS を使用すると、対象のカットフォルダの中に以下の「�
 
 *   **`.cut_manifest.json`**:
     *   現在のカットフォルダ内の「全ファイルのリストとハッシュ値」を記憶している最新のメインファイルです。
+    *   ※ 他のツール（AfterEffectsのJSX等）からパースして利用するためのデータ仕様については、**[MANIFEST_SPEC.md](MANIFEST_SPEC.md)** を参照してください。
 *   **`.acvs_history/` (ディレクトリ)**:
     *   `commit` が行われるたびに、過去の `.cut_manifest.json` が `日時.json` としてここに保管されていきます。
 
