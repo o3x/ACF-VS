@@ -10,6 +10,11 @@ class ACVSCore:
     def __init__(self, target_dir):
         self.target_dir = os.path.abspath(target_dir)
         self.manifest_path = os.path.join(self.target_dir, '.cut_manifest.json')
+        self.history_dir = os.path.join(self.target_dir, '.acvs_history')
+
+    def _ensure_history_dir(self):
+        if not os.path.exists(self.history_dir):
+            os.makedirs(self.history_dir)
 
     def calculate_hash(self, file_path, fast_mode=False):
         """ファイルのSHA-256ハッシュを計算する。速さ優先のfast_modeもサポート。"""
@@ -265,16 +270,162 @@ class ACVSCore:
             print("Fatal: Not an ACVS directory (or any of the parent directories): .cut_manifest.json not found")
             return
             
-        _, new_state = self.scan(fast_mode=fast_mode, group_seq=group_seq)
+        old_state = self.load_manifest()
+        changes, new_state = self.scan(fast_mode=fast_mode, group_seq=group_seq)
+        
+        has_changes = any(len(v) > 0 for k, v in changes.items() if k != "redundant_copies")
+        
+        self._ensure_history_dir()
+        
+        # 履歴の保存ロジック (Smart Archive)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        history_file = os.path.join(self.history_dir, f"{timestamp}.json")
+        
+        # メタデータを付加して保存
+        save_data = {
+            "_meta": {
+                "timestamp": timestamp,
+                "has_changes": has_changes,
+                "fast_mode": fast_mode,
+                "seq_grouped": group_seq
+            },
+            "state": new_state
+        }
+        
+        # 以前のコミットが「無変更」だった場合、それを古紙として破棄（整理）する
+        # （常に最新の「無変更確認日時」か「意味のあるスナップショット」だけを残すため）
+        for hl in os.listdir(self.history_dir):
+            if hl.endswith('.json'):
+                hp = os.path.join(self.history_dir, hl)
+                try:
+                    with open(hp, 'r', encoding='utf-8') as f:
+                        h_data = json.load(f)
+                        if "_meta" in h_data and not h_data["_meta"].get("has_changes", True):
+                            os.remove(hp)
+                except Exception:
+                    pass
+        
+        # 今回の状態を履歴としてバックアップ
+        with open(history_file, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, indent=2, ensure_ascii=False)
+            
+        # 最新の .cut_manifest.json を上書き
         self.save_manifest(new_state)
-        print("Manifest updated successfully.")
+        
+        if has_changes:
+            print(f"Manifest updated successfully. Backup saved to .acvs_history/{timestamp}.json")
+        else:
+            print(f"No changes detected. Checked time recorded at .acvs_history/{timestamp}.json")
+
+    def log(self):
+        """履歴(History)の一覧を表示する"""
+        if not os.path.exists(self.history_dir):
+            print("No history found.")
+            return
+            
+        history_files = sorted([f for f in os.listdir(self.history_dir) if f.endswith('.json')], reverse=True)
+        
+        if not history_files:
+            print("No history found.")
+            return
+            
+        print("--- ACVS Local History ---")
+        for hf in history_files:
+            hp = os.path.join(self.history_dir, hf)
+            try:
+                with open(hp, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    meta = data.get("_meta", {})
+                    ts = meta.get("timestamp", hf.replace('.json', ''))
+                    # 日時フォーマットを読みやすく
+                    readable_time = datetime.strptime(ts, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+                    status = "Changed" if meta.get("has_changes", True) else "No changes (Checked)"
+                    files_count = len(data.get("state", {}))
+                    
+                    print(f"[{ts}] {readable_time} | Status: {status} | Files: {files_count}")
+            except Exception as e:
+                print(f"Error reading {hf}: {e}")
+
+    def diff(self, timestamp, fast_mode=False, group_seq=False):
+        """指定した過去の日時の状態と現在の状態を比較して差分を表示する"""
+        if not os.path.exists(self.history_dir):
+            print("Fatal: No history directory found.")
+            return
+
+        target_file = os.path.join(self.history_dir, f"{timestamp}.json")
+        if not os.path.exists(target_file):
+            print(f"Fatal: History for '{timestamp}' not found.")
+            # 似たようなタイムスタンプを提案する機能
+            available = [f.replace('.json', '') for f in os.listdir(self.history_dir) if f.endswith('.json')]
+            if available:
+                print("Available history timestamps:")
+                for a in sorted(available, reverse=True):
+                    print(f"  {a}")
+            return
+            
+        print(f"Comparing current state against history: {timestamp} ...\n")
+        
+        try:
+            with open(target_file, 'r', encoding='utf-8') as f:
+                history_data = json.load(f)
+                old_state = history_data.get("state", {})
+        except Exception as e:
+            print(f"Error reading history file: {e}")
+            return
+            
+        # 現在の状態を取得
+        new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
+        
+        # 比較
+        changes = self.compare_states(old_state, new_state)
+        
+        has_changes = False
+        
+        if changes["new"]:
+            has_changes = True
+            print("New files (since history):")
+            for p in changes["new"]:
+                print(f"  [NEW] {p}")
+                
+        if changes["updated"]:
+            has_changes = True
+            print("\nUpdated files (since history):")
+            for p in changes["updated"]:
+                print(f"  [UPDATED] {p}")
+                
+        if changes["moved"]:
+            has_changes = True
+            print("\nMoved files (since history):")
+            for m in changes["moved"]:
+                print(f"  [MOVED] {m['from']} -> {m['to']}")
+                
+        if changes["moved_to_archive"]:
+            has_changes = True
+            print("\nArchived files (since history):")
+            for m in changes["moved_to_archive"]:
+                print(f"  [ARCHIVED (old)] {m['from']} -> {m['to']}")
+                
+        if changes["deleted"]:
+            has_changes = True
+            print("\nDeleted files (since history):")
+            for p in changes["deleted"]:
+                print(f"  [DELETED] {p}")
+                
+        if changes["redundant_copies"]:
+            print("\nWarning: Redundant copies detected in current state:")
+            for copies in changes["redundant_copies"]:
+                print(f"  [DUPLICATE] Identical files: {', '.join(copies)}")
+                
+        if not has_changes:
+            print("No changes compared to the specified history.")
 
 def main():
     parser = argparse.ArgumentParser(description="ACF-VS (Anime Cut Folder Versioning System)")
-    parser.add_argument('command', choices=['init', 'scan', 'status', 'commit', 'verify'], help='Command to execute')
+    parser.add_argument('command', choices=['init', 'scan', 'status', 'commit', 'verify', 'log', 'diff'], help='Command to execute')
     parser.add_argument('--dir', default='.', help='Target directory (default: current directory)')
     parser.add_argument('--fast', action='store_true', help='Use fast mode (size+mtime instead of full hash)')
     parser.add_argument('--seq', action='store_true', help='Group sequence files (e.g. name_001.tga) into a single entry')
+    parser.add_argument('--target', help='Target timestamp for diff command (e.g., 20260227_182939)')
     
     args = parser.parse_args()
     
@@ -292,6 +443,14 @@ def main():
     elif args.command == 'verify':
         # Same as status for now, visually verifies state
         acvs.status(fast_mode=args.fast, group_seq=args.seq)
+    elif args.command == 'log':
+        acvs.log()
+    elif args.command == 'diff':
+        if not args.target:
+            print("Error: --target timestamp is required for diff command.")
+            acvs.log() # 候補を表示してあげる
+        else:
+            acvs.diff(args.target, fast_mode=args.fast, group_seq=args.seq)
 
 if __name__ == "__main__":
     main()
