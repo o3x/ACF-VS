@@ -1,0 +1,10 @@
+﻿New files:
+  [NEW] 2D/char_B.png
+  [NEW] BG/A_bg/bg_anim_[0001-0050].png
+  [NEW] CELL/A_cell/A_cell_[0001-1000].tga
+
+Updated files:
+  [UPDATED] BG/bg_001.psd
+
+Archived files:
+  [ARCHIVED (old)] BG/bg_002.psd -> BG/(old)/bg_002.psd

@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 ### Added
+- Phase 2: 連番画像のハッシュ最適化処理機能を追加 (Fri Feb 27 16:22:26 JST 2026)
+  - `acvs_core.py`: `status` と `scan` に `--seq` オプションを追加。連番ファイルを自動グループ化して軽量化（`seq_name_[0001-1000].ext` 形式）。
+  - `test_seq_generator.py`: ベンチマーク・テスト用のダミー連番画像生成スクリプト。
 - 初期プロジェクト構造の作成 (Fri Feb 27 15:47:36 JST 2026)
   - `acvs_core.py`: ハッシュ計算、ディレクトリ走査、状態比較のプロトタイプ実装。
   - `.gitignore`: アニメーション素材用の除外設定を追加。

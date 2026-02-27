@@ -3,6 +3,7 @@ import hashlib
 import json
 import argparse
 import time
+import re
 from datetime import datetime
 
 class ACVSCore:
@@ -28,20 +29,39 @@ class ACVSCore:
         except OSError:
             return None
 
-    def scan_directory(self, fast_mode=False):
+    def scan_directory(self, fast_mode=False, group_seq=False):
         """ディレクトリ以下を再帰的に走査し、現在の状態を取得する。"""
         state = {}
+        seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
+        
+        # 正規表現：プレフィックス _ 数字(1桁以上) . 拡張子
+        seq_pattern = re.compile(r'^(.*?)_([0-9]+)\.([a-zA-Z0-9]+)$')
+
         for root, dirs, files in os.walk(self.target_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.target_dir)
                 
-                # ACF-VS管理ファイルや無視すべきファイルはスキップ
-                if rel_path.startswith('.cut_manifest') or rel_path == '.gitignore' or file == 'acvs_core.py':
+                if rel_path.startswith('.cut_manifest') or rel_path == '.gitignore' or file == 'acvs_core.py' or file == 'test_seq_generator.py':
                     continue
                 
-                # Windowsのパス区切り文字を正規化
                 rel_path = rel_path.replace('\\', '/')
+                
+                if group_seq:
+                    match = seq_pattern.match(file)
+                    if match:
+                        prefix, num_str, ext = match.groups()
+                        # 親ディレクトリの相対パス
+                        parent_rel_path = os.path.dirname(rel_path)
+                        
+                        seq_groups.setdefault(parent_rel_path, {}).setdefault(prefix, {}).setdefault(ext, []).append({
+                            'filename': file,
+                            'path': file_path,
+                            'rel_path': rel_path,
+                            'num': int(num_str),
+                            'num_str': num_str
+                        })
+                        continue # 連番ファイルは個別のファイルとしては state に追加しない
 
                 file_hash = self.calculate_hash(file_path, fast_mode=fast_mode)
                 if not file_hash:
@@ -52,8 +72,50 @@ class ACVSCore:
                     "hash": file_hash,
                     "mtime": stat.st_mtime,
                     "size": stat.st_size,
-                    "is_archived": "(old)" in rel_path.lower()
+                    "is_archived": "(old)" in rel_path.lower(),
+                    "type": "file"
                 }
+
+        # 連番グループの処理
+        if group_seq:
+            for parent_dir, prefixes in seq_groups.items():
+                for prefix, exts in prefixes.items():
+                    for ext, items in exts.items():
+                        # グループ構成の閾値 (例: 3枚以上なら連番とみなす)
+                        if len(items) >= 3:
+                            items.sort(key=lambda x: x['num'])
+                            first_item = items[0]
+                            last_item = items[-1]
+                            
+                            num_format_len = len(first_item['num_str'])
+                            seq_name = f"{parent_dir}/{prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
+                            
+                            # 代表ハッシュの計算 (先頭のファイルの fast_mode + 枚数)
+                            head_hash = self.calculate_hash(first_item['path'], fast_mode=True)
+                            group_hash = f"seq:{head_hash}:{len(items)}"
+                            
+                            state[seq_name] = {
+                                "hash": group_hash,
+                                "mtime": os.stat(last_item['path']).st_mtime,
+                                "size": sum(os.stat(i['path']).st_size for i in items),
+                                "is_archived": "(old)" in seq_name.lower(),
+                                "type": "sequence",
+                                "count": len(items)
+                            }
+                        else:
+                            # 3枚未満なら通常のファイルとして扱う
+                            for item in items:
+                                file_hash = self.calculate_hash(item['path'], fast_mode=fast_mode)
+                                if file_hash:
+                                    stat = os.stat(item['path'])
+                                    state[item['rel_path']] = {
+                                        "hash": file_hash,
+                                        "mtime": stat.st_mtime,
+                                        "size": stat.st_size,
+                                        "is_archived": "(old)" in item['rel_path'].lower(),
+                                        "type": "file"
+                                    }
+                            
         return state
 
     def compare_states(self, old_state, new_state):
@@ -145,18 +207,18 @@ class ACVSCore:
         print(f"Initialized manifest with {len(state)} files.")
         return True
 
-    def scan(self, fast_mode=False):
+    def scan(self, fast_mode=False, group_seq=False):
         old_state = self.load_manifest()
-        new_state = self.scan_directory(fast_mode=fast_mode)
+        new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
         changes = self.compare_states(old_state, new_state)
         return changes, new_state
 
-    def status(self, fast_mode=False):
+    def status(self, fast_mode=False, group_seq=False):
         if not os.path.exists(self.manifest_path):
             print("Fatal: Not an ACVS directory (or any of the parent directories): .cut_manifest.json not found")
             return
             
-        changes, _ = self.scan(fast_mode=fast_mode)
+        changes, _ = self.scan(fast_mode=fast_mode, group_seq=group_seq)
         
         has_changes = False
         
@@ -198,12 +260,12 @@ class ACVSCore:
         if not has_changes:
             print("Nothing to commit, working tree clean")
 
-    def commit(self, fast_mode=False):
+    def commit(self, fast_mode=False, group_seq=False):
         if not os.path.exists(self.manifest_path):
             print("Fatal: Not an ACVS directory (or any of the parent directories): .cut_manifest.json not found")
             return
             
-        _, new_state = self.scan(fast_mode=fast_mode)
+        _, new_state = self.scan(fast_mode=fast_mode, group_seq=group_seq)
         self.save_manifest(new_state)
         print("Manifest updated successfully.")
 
@@ -212,6 +274,7 @@ def main():
     parser.add_argument('command', choices=['init', 'scan', 'status', 'commit', 'verify'], help='Command to execute')
     parser.add_argument('--dir', default='.', help='Target directory (default: current directory)')
     parser.add_argument('--fast', action='store_true', help='Use fast mode (size+mtime instead of full hash)')
+    parser.add_argument('--seq', action='store_true', help='Group sequence files (e.g. name_001.tga) into a single entry')
     
     args = parser.parse_args()
     
@@ -220,15 +283,15 @@ def main():
     if args.command == 'init':
         acvs.init()
     elif args.command == 'status':
-        acvs.status(fast_mode=args.fast)
+        acvs.status(fast_mode=args.fast, group_seq=args.seq)
     elif args.command == 'scan':
         # Alias for status but can be used for dry-run inspection in scripts
-        acvs.status(fast_mode=args.fast)
+        acvs.status(fast_mode=args.fast, group_seq=args.seq)
     elif args.command == 'commit':
-        acvs.commit(fast_mode=args.fast)
+        acvs.commit(fast_mode=args.fast, group_seq=args.seq)
     elif args.command == 'verify':
         # Same as status for now, visually verifies state
-        acvs.status(fast_mode=args.fast)
+        acvs.status(fast_mode=args.fast, group_seq=args.seq)
 
 if __name__ == "__main__":
     main()
