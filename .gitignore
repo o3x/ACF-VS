@@ -1,0 +1,27 @@
+# ACF-VS Ignore File
+
+# Scripts and manifest
+!acvs_core.py
+!.cut_manifest.json
+
+# Animation / Design Assets
+*.psd
+*.aep
+*.tga
+*.png
+*.exr
+*.jpg
+*.jpeg
+*.mov
+*.mp4
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# OS generated files
+.DS_Store
+Thumbs.db

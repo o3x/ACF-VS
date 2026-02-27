@@ -1,0 +1,20 @@
+{
+    "2D/char_A.png": {
+        "hash": "198b3411b85e11d82701cc93c7eae15e73a02503159939ee8ee1e4a95c61dfb8",
+        "mtime": 1772174763.7589743,
+        "size": 18,
+        "is_archived": false
+    },
+    "BG/bg_001.psd": {
+        "hash": "4057761ae829327599643670ea61029973d74cdbe933c2748b3199bcb9d8ecc3",
+        "mtime": 1772174763.73883,
+        "size": 18,
+        "is_archived": false
+    },
+    "BG/bg_002.psd": {
+        "hash": "e4037501356e5a5d53ccf33dd404054a7acda1ca86f1236068136163baf56a4e",
+        "mtime": 1772174763.7486897,
+        "size": 18,
+        "is_archived": false
+    }
+}
