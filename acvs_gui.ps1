@@ -1,5 +1,5 @@
-﻿# Version: 0.2.5
-# Last Updated: Sat Feb 28 15:01:48 JST 2026
+﻿# Version: 0.2.6
+# Last Updated: Sat Feb 28 15:29:42 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -195,11 +195,15 @@ function Invoke-ACVSCommand {
 
 # 参照ボタンの動作
 $btnBrowse.Add_Click({
-        $dialog = New-Object Windows.Forms.FolderBrowserDialog
-        $dialog.Description = "エピソードルートフォルダを選択してください"
-        $dialog.SelectedPath = $txtRoot.Text
+        $dialog = New-Object Windows.Forms.OpenFileDialog
+        $dialog.Title = "エピソードルートフォルダを選択してください"
+        $dialog.CheckFileExists = $false
+        $dialog.CheckPathExists = $true
+        $dialog.FileName = "Folder Selection"
+        $dialog.Filter = "Folders|*.none"
+        $dialog.InitialDirectory = $txtRoot.Text
         if ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
-            $txtRoot.Text = $dialog.SelectedPath
+            $txtRoot.Text = [System.IO.Path]::GetDirectoryName($dialog.FileName)
         }
     })
 

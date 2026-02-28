@@ -1,5 +1,5 @@
-# Version: 0.2.5
-# Last Updated: Sat Feb 28 15:01:48 JST 2026
+# Version: 0.2.6
+# Last Updated: Sat Feb 28 15:29:42 JST 2026
 
 import os
 import hashlib
