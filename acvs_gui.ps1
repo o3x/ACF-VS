@@ -1,27 +1,27 @@
-# Version: 0.2.2
-# Last Updated: Sat Feb 28 11:33:36 JST 2026
+﻿# Version: 0.2.4
+# Last Updated: Sat Feb 28 15:00:24 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# メインフォームの作成
+# 繝｡繧､繝ｳ繝輔か繝ｼ繝縺ｮ菴懈・
 $form = New-Object Windows.Forms.Form
 $form.Text = "ACF-VS (Anime Cut Folder Versioning System) GUI"
 $form.Size = New-Object Drawing.Size(800, 600)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::White
 
-# フォント設定
+# 繝輔か繝ｳ繝郁ｨｭ螳・
 $font_main = New-Object System.Drawing.Font("Meiryo UI", 10)
 $font_bold = New-Object System.Drawing.Font("Meiryo UI", 10, [System.Drawing.FontStyle]::Bold)
 $font_console = New-Object System.Drawing.Font("Consolas", 10)
 $form.Font = $font_main
 
-# --- コントロールの配置 ---
+# --- 繧ｳ繝ｳ繝医Ο繝ｼ繝ｫ縺ｮ驟咲ｽｮ ---
 
-# 1. Root Directory 選択部
+# 1. Root Directory 驕ｸ謚樣Κ
 $labelRoot = New-Object Windows.Forms.Label
-$labelRoot.Text = "エピソードルート (Root Dir):"
+$labelRoot.Text = "繧ｨ繝斐た繝ｼ繝峨Ν繝ｼ繝・(Root Dir):"
 $labelRoot.Location = New-Object Drawing.Point(20, 20)
 $labelRoot.AutoSize = $true
 $form.Controls.Add($labelRoot)
@@ -29,20 +29,20 @@ $form.Controls.Add($labelRoot)
 $txtRoot = New-Object Windows.Forms.TextBox
 $txtRoot.Location = New-Object Drawing.Point(20, 45)
 $txtRoot.Size = New-Object Drawing.Size(600, 25)
-# 実行しているディレクトリを初期値にする
+# 螳溯｡後＠縺ｦ縺・ｋ繝・ぅ繝ｬ繧ｯ繝医Μ繧貞・譛溷､縺ｫ縺吶ｋ
 $txtRoot.Text = (Get-Location).Path
 $form.Controls.Add($txtRoot)
 
 $btnBrowse = New-Object Windows.Forms.Button
-$btnBrowse.Text = "参照..."
+$btnBrowse.Text = "蜿ら・..."
 $btnBrowse.Location = New-Object Drawing.Point(630, 43)
 $btnBrowse.Size = New-Object Drawing.Size(130, 28)
 $btnBrowse.BackColor = [System.Drawing.Color]::LightGray
 $form.Controls.Add($btnBrowse)
 
-# 2. カット番号入力部
+# 2. 繧ｫ繝・ヨ逡ｪ蜿ｷ蜈･蜉幃Κ
 $labelCut = New-Object Windows.Forms.Label
-$labelCut.Text = "カット番号 (例: c001):"
+$labelCut.Text = "繧ｫ繝・ヨ逡ｪ蜿ｷ (萓・ c001):"
 $labelCut.Location = New-Object Drawing.Point(20, 90)
 $labelCut.AutoSize = $true
 $form.Controls.Add($labelCut)
@@ -50,10 +50,10 @@ $form.Controls.Add($labelCut)
 $txtCut = New-Object Windows.Forms.TextBox
 $txtCut.Location = New-Object Drawing.Point(180, 87)
 $txtCut.Size = New-Object Drawing.Size(150, 25)
-$txtCut.Text = "test_env" # テスト用初期値
+$txtCut.Text = "test_env" # 繝・せ繝育畑蛻晄悄蛟､
 $form.Controls.Add($txtCut)
 
-# 3. アクションボタン
+# 3. 繧｢繧ｯ繧ｷ繝ｧ繝ｳ繝懊ち繝ｳ
 $btnStatus = New-Object Windows.Forms.Button
 $btnStatus.Text = "Scan (Status)"
 $btnStatus.Location = New-Object Drawing.Point(20, 130)
@@ -93,9 +93,9 @@ $chkSeq.Checked = $true
 $form.Controls.Add($chkSeq)
 
 
-# 4. 出力表示エリア
+# 4. 蜃ｺ蜉幄｡ｨ遉ｺ繧ｨ繝ｪ繧｢
 $labelOutput = New-Object Windows.Forms.Label
-$labelOutput.Text = "出力 (Output):"
+$labelOutput.Text = "蜃ｺ蜉・(Output):"
 $labelOutput.Location = New-Object Drawing.Point(20, 180)
 $labelOutput.AutoSize = $true
 $form.Controls.Add($labelOutput)
@@ -111,7 +111,7 @@ $txtOutput.BackColor = [System.Drawing.Color]::Black
 $txtOutput.ForeColor = [System.Drawing.Color]::LightGreen
 $form.Controls.Add($txtOutput)
 
-# --- イベントの設定 ---
+# --- 繧､繝吶Φ繝医・險ｭ螳・---
 
 $python_script = Join-Path -Path $PSScriptRoot -ChildPath "acvs_core.py"
 
@@ -142,7 +142,7 @@ function Invoke-ACVSCommand {
         return
     }
     
-    # UIの無効化（二重実行防止）
+    # UI縺ｮ辟｡蜉ｹ蛹厄ｼ井ｺ碁㍾螳溯｡碁亟豁｢・・
     Set-UIState -enabled $false
     $txtOutput.Text = "Running ACF-VS $command on $targetDir ...`r`n"
     $txtOutput.Text += "Please wait (GUI will remain responsive)...`r`n`r`n"
@@ -168,7 +168,7 @@ function Invoke-ACVSCommand {
         $process.StartInfo = $processInfo
         $process.Start() | Out-Null
         
-        # 非同期待ちループ（DoEventsでGUIを動かし続ける）
+        # 髱槫酔譛溷ｾ・■繝ｫ繝ｼ繝暦ｼ・oEvents縺ｧGUI繧貞虚縺九＠邯壹￠繧具ｼ・
         while (-not $process.HasExited) {
             [System.Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 100
@@ -180,7 +180,7 @@ function Invoke-ACVSCommand {
         if ($stdout) { $txtOutput.Text += $stdout }
         if ($stderr) { $txtOutput.Text += "ERROR:`r`n" + $stderr }
         
-        # 改行コードの調整
+        # 謾ｹ陦後さ繝ｼ繝峨・隱ｿ謨ｴ
         $txtOutput.Text = $txtOutput.Text -replace "`r`n", "`n" -replace "`r", "`n" -replace "`n", "`r`n"
         
     }
@@ -188,42 +188,43 @@ function Invoke-ACVSCommand {
         $txtOutput.Text += "Failed to execute python script. Make sure python is in PATH and acvs_core.py exists next to this script."
     }
     finally {
-        # UIの有効化
+        # UI縺ｮ譛牙柑蛹・
         Set-UIState -enabled $true
     }
 }
 
-# 参照ボタンの動作
+# 蜿ら・繝懊ち繝ｳ縺ｮ蜍穂ｽ・
 $btnBrowse.Add_Click({
         $dialog = New-Object Windows.Forms.FolderBrowserDialog
-        $dialog.Description = "エピソードルートフォルダを選択してください"
+        $dialog.Description = "繧ｨ繝斐た繝ｼ繝峨Ν繝ｼ繝医ヵ繧ｩ繝ｫ繝繧帝∈謚槭＠縺ｦ縺上□縺輔＞"
         $dialog.SelectedPath = $txtRoot.Text
         if ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
             $txtRoot.Text = $dialog.SelectedPath
         }
     })
 
-# Scan(Status)ボタンの動作
+# Scan(Status)繝懊ち繝ｳ縺ｮ蜍穂ｽ・
 $btnStatus.Add_Click({
         Invoke-ACVSCommand -command "status"
     })
 
-# Commitボタンの動作
+# Commit繝懊ち繝ｳ縺ｮ蜍穂ｽ・
 $btnCommit.Add_Click({
         Invoke-ACVSCommand -command "commit"
     })
 
-# Logボタンの動作
+# Log繝懊ち繝ｳ縺ｮ蜍穂ｽ・
 $btnLog.Add_Click({
         Invoke-ACVSCommand -command "log"
     })
 
-# EnterキーでScanを実行する便利機能
+# Enter繧ｭ繝ｼ縺ｧScan繧貞ｮ溯｡後☆繧倶ｾｿ蛻ｩ讖溯・
 $txtCut.Add_KeyDown({
         if ($_.KeyCode -eq "Enter") {
             Invoke-ACVSCommand -command "status"
         }
     })
 
-# フォームの表示
+# 繝輔か繝ｼ繝縺ｮ陦ｨ遉ｺ
 $form.ShowDialog() | Out-Null
+
