@@ -122,6 +122,16 @@ function Get-TargetDir {
     return Join-Path -Path $rootDir -ChildPath $cutDir
 }
 
+function Set-UIState {
+    param([bool]$enabled)
+    $btnStatus.Enabled = $enabled
+    $btnCommit.Enabled = $enabled
+    $btnLog.Enabled = $enabled
+    $txtRoot.Enabled = $enabled
+    $txtCut.Enabled = $enabled
+    $btnBrowse.Enabled = $enabled
+}
+
 function Run-ACVSCommand {
     param([string]$command)
     
@@ -132,7 +142,10 @@ function Run-ACVSCommand {
         return
     }
     
-    $txtOutput.Text = "Running ACF-VS $command on $targetDir ...`r`n`r`n"
+    # UIの無効化（二重実行防止）
+    Set-UIState -enabled $false
+    $txtOutput.Text = "Running ACF-VS $command on $targetDir ...`r`n"
+    $txtOutput.Text += "Please wait (GUI will remain responsive)...`r`n`r`n"
     
     $args = @($command, "--dir", "`"$targetDir`"")
     if ($chkFast.Checked) { $args += "--fast" }
@@ -141,7 +154,6 @@ function Run-ACVSCommand {
     $fullArgs = $args -join " "
     
     try {
-        # output encoding setting for windows
         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
         $processInfo.FileName = "python"
         $processInfo.Arguments = "`"$python_script`" $fullArgs"
@@ -155,7 +167,12 @@ function Run-ACVSCommand {
         $process = New-Object System.Diagnostics.Process
         $process.StartInfo = $processInfo
         $process.Start() | Out-Null
-        $process.WaitForExit()
+        
+        # 非同期待ちループ（DoEventsでGUIを動かし続ける）
+        while (-not $process.HasExited) {
+            [System.Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 100
+        }
         
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
@@ -163,45 +180,50 @@ function Run-ACVSCommand {
         if ($stdout) { $txtOutput.Text += $stdout }
         if ($stderr) { $txtOutput.Text += "ERROR:`r`n" + $stderr }
         
-        # 改行コードの調整（Windowsコントロール用）
+        # 改行コードの調整
         $txtOutput.Text = $txtOutput.Text -replace "`r`n", "`n" -replace "`r", "`n" -replace "`n", "`r`n"
         
-    } catch {
+    }
+    catch {
         $txtOutput.Text += "Failed to execute python script. Make sure python is in PATH and acvs_core.py exists next to this script."
+    }
+    finally {
+        # UIの有効化
+        Set-UIState -enabled $true
     }
 }
 
 # 参照ボタンの動作
 $btnBrowse.Add_Click({
-    $dialog = New-Object Windows.Forms.FolderBrowserDialog
-    $dialog.Description = "エピソードルートフォルダを選択してください"
-    $dialog.SelectedPath = $txtRoot.Text
-    if ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
-        $txtRoot.Text = $dialog.SelectedPath
-    }
-})
+        $dialog = New-Object Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "エピソードルートフォルダを選択してください"
+        $dialog.SelectedPath = $txtRoot.Text
+        if ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+            $txtRoot.Text = $dialog.SelectedPath
+        }
+    })
 
 # Scan(Status)ボタンの動作
 $btnStatus.Add_Click({
-    Run-ACVSCommand -command "status"
-})
+        Run-ACVSCommand -command "status"
+    })
 
 # Commitボタンの動作
 $btnCommit.Add_Click({
-    Run-ACVSCommand -command "commit"
-})
+        Run-ACVSCommand -command "commit"
+    })
 
 # Logボタンの動作
 $btnLog.Add_Click({
-    Run-ACVSCommand -command "log"
-})
+        Run-ACVSCommand -command "log"
+    })
 
 # EnterキーでScanを実行する便利機能
 $txtCut.Add_KeyDown({
-    if ($_.KeyCode -eq "Enter") {
-        Run-ACVSCommand -command "status"
-    }
-})
+        if ($_.KeyCode -eq "Enter") {
+            Run-ACVSCommand -command "status"
+        }
+    })
 
 # フォームの表示
 $form.ShowDialog() | Out-Null
