@@ -132,7 +132,7 @@ function Set-UIState {
     $btnBrowse.Enabled = $enabled
 }
 
-function Run-ACVSCommand {
+function Invoke-ACVSCommand {
     param([string]$command)
     
     $targetDir = Get-TargetDir
@@ -147,11 +147,11 @@ function Run-ACVSCommand {
     $txtOutput.Text = "Running ACF-VS $command on $targetDir ...`r`n"
     $txtOutput.Text += "Please wait (GUI will remain responsive)...`r`n`r`n"
     
-    $args = @($command, "--dir", "`"$targetDir`"")
-    if ($chkFast.Checked) { $args += "--fast" }
-    if ($chkSeq.Checked) { $args += "--seq" }
+    $cmdArgs = @($command, "--dir", "`"$targetDir`"")
+    if ($chkFast.Checked) { $cmdArgs += "--fast" }
+    if ($chkSeq.Checked) { $cmdArgs += "--seq" }
     
-    $fullArgs = $args -join " "
+    $fullArgs = $cmdArgs -join " "
     
     try {
         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -205,23 +205,23 @@ $btnBrowse.Add_Click({
 
 # Scan(Status)ボタンの動作
 $btnStatus.Add_Click({
-        Run-ACVSCommand -command "status"
+        Invoke-ACVSCommand -command "status"
     })
 
 # Commitボタンの動作
 $btnCommit.Add_Click({
-        Run-ACVSCommand -command "commit"
+        Invoke-ACVSCommand -command "commit"
     })
 
 # Logボタンの動作
 $btnLog.Add_Click({
-        Run-ACVSCommand -command "log"
+        Invoke-ACVSCommand -command "log"
     })
 
 # EnterキーでScanを実行する便利機能
 $txtCut.Add_KeyDown({
         if ($_.KeyCode -eq "Enter") {
-            Run-ACVSCommand -command "status"
+            Invoke-ACVSCommand -command "status"
         }
     })
 
