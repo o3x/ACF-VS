@@ -1,5 +1,5 @@
-# Version: 0.2.9
-# Last Updated: Sat Feb 28 15:48:42 JST 2026
+# Version: 0.2.10
+# Last Updated: Sat Feb 28 15:57:13 JST 2026
 
 import os
 import hashlib
@@ -7,6 +7,7 @@ import json
 import argparse
 import time
 import re
+import sys
 import concurrent.futures
 from datetime import datetime
 
@@ -215,11 +216,11 @@ class ACVSCore:
         with open(self.manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest_data, f, indent=4, ensure_ascii=False)
 
-    def init(self):
+    def init(self, fast_mode=False, group_seq=False):
         if os.path.exists(self.manifest_path):
             print("Already initialized.")
             return False
-        state = self.scan_directory()
+        state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
         self.save_manifest(state)
         print(f"Initialized manifest with {len(state)} files.")
         return True
@@ -432,6 +433,13 @@ class ACVSCore:
             print("No changes compared to the specified history.")
 
 def main():
+    # 強制的に標準出力をUTF-8にして、PowerShell側での文字化け（Mojibake）を防ぐ
+    if sys.stdout.encoding.lower() != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass # Python 3.7 未満等の場合は無視
+
     parser = argparse.ArgumentParser(description="ACF-VS (Anime Cut Folder Versioning System)")
     parser.add_argument('command', choices=['init', 'scan', 'status', 'commit', 'verify', 'log', 'diff'], help='Command to execute')
     parser.add_argument('--dir', default='.', help='Target directory (default: current directory)')
@@ -444,7 +452,7 @@ def main():
     acvs = ACVSCore(args.dir)
     
     if args.command == 'init':
-        acvs.init()
+        acvs.init(fast_mode=args.fast, group_seq=args.seq)
     elif args.command == 'status':
         acvs.status(fast_mode=args.fast, group_seq=args.seq)
     elif args.command == 'scan':

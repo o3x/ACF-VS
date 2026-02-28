@@ -1,5 +1,5 @@
-﻿# Version: 0.2.9
-# Last Updated: Sat Feb 28 15:48:42 JST 2026
+﻿# Version: 0.2.10
+# Last Updated: Sat Feb 28 15:57:13 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -167,6 +167,10 @@ function Invoke-ACVSCommand {
         $processInfo.UseShellExecute = $false
         $processInfo.CreateNoWindow = $true
         $processInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+        
+        # PythonにUTF-8での出力を強制する
+        $processInfo.EnvironmentVariables["PYTHONUTF8"] = "1"
+        $processInfo.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8"
 
         $process = New-Object System.Diagnostics.Process
         $process.StartInfo = $processInfo
