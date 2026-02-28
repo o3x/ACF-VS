@@ -1,5 +1,5 @@
-# Version: 0.2.6
-# Last Updated: Sat Feb 28 15:29:42 JST 2026
+# Version: 0.2.7
+# Last Updated: Sat Feb 28 15:41:57 JST 2026
 
 import os
 import hashlib
@@ -42,10 +42,16 @@ class ACVSCore:
         state = {}
         seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
         
+        # 除外するディレクトリ名
+        exclude_dirs = {'.git', '.acvs_history', '__pycache__', 'test_env'}
+        
         # 正規表現：プレフィックス _ 数字(1桁以上) . 拡張子
         seq_pattern = re.compile(r'^(.*?)_([0-9]+)\.([a-zA-Z0-9]+)$')
 
         for root, dirs, files in os.walk(self.target_dir):
+            # ディレクトリの除外
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.target_dir)

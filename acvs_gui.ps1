@@ -1,5 +1,5 @@
-﻿# Version: 0.2.6
-# Last Updated: Sat Feb 28 15:29:42 JST 2026
+﻿# Version: 0.2.7
+# Last Updated: Sat Feb 28 15:41:57 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -78,6 +78,14 @@ $btnLog.BackColor = [System.Drawing.Color]::LightGoldenrodYellow
 $btnLog.Font = $font_bold
 $form.Controls.Add($btnLog)
 
+$btnInit = New-Object Windows.Forms.Button
+$btnInit.Text = "Init (Setup)"
+$btnInit.Location = New-Object Drawing.Point(340, 85)
+$btnInit.Size = New-Object Drawing.Size(150, 30)
+$btnInit.BackColor = [System.Drawing.Color]::Orange
+$btnInit.Font = $font_bold
+$form.Controls.Add($btnInit)
+
 $chkFast = New-Object Windows.Forms.CheckBox
 $chkFast.Text = "Fast Mode (Size+Time)"
 $chkFast.Location = New-Object Drawing.Point(510, 125)
@@ -127,6 +135,7 @@ function Set-UIState {
     $btnStatus.Enabled = $enabled
     $btnCommit.Enabled = $enabled
     $btnLog.Enabled = $enabled
+    $btnInit.Enabled = $enabled
     $txtRoot.Enabled = $enabled
     $txtCut.Enabled = $enabled
     $btnBrowse.Enabled = $enabled
@@ -149,7 +158,7 @@ function Invoke-ACVSCommand {
     
     $cmdArgs = @($command, "--dir", "`"$targetDir`"")
     if ($chkFast.Checked) { $cmdArgs += "--fast" }
-    if ($chkSeq.Checked) { $chkSeq.Checked = $true; $cmdArgs += "--seq" } # Logic correction if needed, but keeping as is
+    if ($chkSeq.Checked) { $cmdArgs += "--seq" }
     
     $fullArgs = $cmdArgs -join " "
     
@@ -179,6 +188,8 @@ function Invoke-ACVSCommand {
         
         if ($stdout) { $txtOutput.Text += $stdout }
         if ($stderr) { $txtOutput.Text += "ERROR:`r`n" + $stderr }
+        
+        $txtOutput.Text += "`r`nDone."
         
         # 改行コードの調整
         $txtOutput.Text = $txtOutput.Text -replace "`r`n", "`n" -replace "`r", "`n" -replace "`n", "`r`n"
@@ -220,6 +231,11 @@ $btnCommit.Add_Click({
 # Logボタンの動作
 $btnLog.Add_Click({
         Invoke-ACVSCommand -command "log"
+    })
+
+# Initボタンの動作
+$btnInit.Add_Click({
+        Invoke-ACVSCommand -command "init"
     })
 
 # EnterキーでScanを実行する便利機能
