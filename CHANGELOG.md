@@ -2,6 +2,16 @@
 
 すべての顕著な変更はこのファイルに記録されます。
 
+## [0.2.9] - Sat Feb 28 15:48:42 JST 2026
+### Added
+- `acvs_gui.ps1`: 処理の進捗を視覚化するプログレスバーを導入。
+- `acvs_gui.ps1`: マニフェスト不在時に自動で初期化を提案する対話型ダイアログを実装。
+- `acvs_core.py`: `concurrent.futures` を使用した並列ハッシュ計算を実装し、大量のファイル処理を高速化。
+- `acvs_core.py`: リアルタイム進捗報告機能（`PROGRESS: n/total`）を追加。
+
+### Changed
+- `acvs_gui.ps1`: 独立した「Init」ボタンを廃止し、スキャン時の自動検知ワークフローに統合。
+
 ## [0.2.7] - Sat Feb 28 15:41:57 JST 2026
 ### Added
 - `acvs_gui.ps1`: 初回利用時のための「Init (Setup)」ボタンを追加。

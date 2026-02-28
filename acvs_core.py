@@ -1,5 +1,5 @@
-# Version: 0.2.7
-# Last Updated: Sat Feb 28 15:41:57 JST 2026
+# Version: 0.2.9
+# Last Updated: Sat Feb 28 15:48:42 JST 2026
 
 import os
 import hashlib
@@ -7,6 +7,7 @@ import json
 import argparse
 import time
 import re
+import concurrent.futures
 from datetime import datetime
 
 class ACVSCore:
@@ -41,6 +42,7 @@ class ACVSCore:
         """ディレクトリ以下を再帰的に走査し、現在の状態を取得する。"""
         state = {}
         seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
+        files_to_process = []
         
         # 除外するディレクトリ名
         exclude_dirs = {'.git', '.acvs_history', '__pycache__', 'test_env'}
@@ -48,10 +50,9 @@ class ACVSCore:
         # 正規表現：プレフィックス _ 数字(1桁以上) . 拡張子
         seq_pattern = re.compile(r'^(.*?)_([0-9]+)\.([a-zA-Z0-9]+)$')
 
+        # 1. ファイル一覧の収集
         for root, dirs, files in os.walk(self.target_dir):
-            # ディレクトリの除外
             dirs[:] = [d for d in dirs if d not in exclude_dirs]
-            
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.target_dir)
@@ -65,70 +66,59 @@ class ACVSCore:
                     match = seq_pattern.match(file)
                     if match:
                         prefix, num_str, ext = match.groups()
-                        # 親ディレクトリの相対パス
                         parent_rel_path = os.path.dirname(rel_path)
-                        
                         seq_groups.setdefault(parent_rel_path, {}).setdefault(prefix, {}).setdefault(ext, []).append({
-                            'filename': file,
-                            'path': file_path,
-                            'rel_path': rel_path,
-                            'num': int(num_str),
-                            'num_str': num_str
+                            'filename': file, 'path': file_path, 'rel_path': rel_path, 'num': int(num_str), 'num_str': num_str
                         })
-                        continue # 連番ファイルは個別のファイルとしては state に追加しない
-
-                file_hash = self.calculate_hash(file_path, fast_mode=fast_mode)
-                if not file_hash:
-                    continue
+                        continue
                 
-                stat = os.stat(file_path)
-                state[rel_path] = {
-                    "hash": file_hash,
-                    "mtime": stat.st_mtime,
-                    "size": stat.st_size,
-                    "is_archived": "(old)" in rel_path.lower(),
-                    "type": "file"
-                }
+                files_to_process.append((rel_path, file_path))
 
-        # 連番グループの処理
+        # 2. ハッシュ計算（並列実行）
+        total_files = len(files_to_process)
+        def process_single_file(item):
+            rel_path, file_path = item
+            h = self.calculate_hash(file_path, fast_mode=fast_mode)
+            if h:
+                st = os.stat(file_path)
+                return rel_path, {"hash": h, "mtime": st.st_mtime, "size": st.st_size, "is_archived": "(old)" in rel_path.lower(), "type": "file"}
+            return None
+
+        print(f"Scanning {total_files} files...")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_single_file, f) for f in files_to_process]
+            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                result = future.result()
+                if result:
+                    path, info = result
+                    state[path] = info
+                # プログレス出力
+                if (i + 1) % 10 == 0 or (i + 1) == total_files:
+                    print(f"PROGRESS: {i+1}/{total_files}")
+
+        # 3. 連番グループの処理
         if group_seq:
             for parent_dir, prefixes in seq_groups.items():
                 for prefix, exts in prefixes.items():
                     for ext, items in exts.items():
-                        # グループ構成の閾値 (例: 3枚以上なら連番とみなす)
                         if len(items) >= 3:
                             items.sort(key=lambda x: x['num'])
                             first_item = items[0]
                             last_item = items[-1]
-                            
                             num_format_len = len(first_item['num_str'])
                             seq_name = f"{parent_dir}/{prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
-                            
-                            # 代表ハッシュの計算 (先頭のファイルの fast_mode + 枚数)
                             head_hash = self.calculate_hash(first_item['path'], fast_mode=True)
                             group_hash = f"seq:{head_hash}:{len(items)}"
-                            
                             state[seq_name] = {
-                                "hash": group_hash,
-                                "mtime": os.stat(last_item['path']).st_mtime,
+                                "hash": group_hash, "mtime": os.stat(last_item['path']).st_mtime,
                                 "size": sum(os.stat(i['path']).st_size for i in items),
-                                "is_archived": "(old)" in seq_name.lower(),
-                                "type": "sequence",
-                                "count": len(items)
+                                "is_archived": "(old)" in seq_name.lower(), "type": "sequence", "count": len(items)
                             }
                         else:
-                            # 3枚未満なら通常のファイルとして扱う
                             for item in items:
-                                file_hash = self.calculate_hash(item['path'], fast_mode=fast_mode)
-                                if file_hash:
-                                    stat = os.stat(item['path'])
-                                    state[item['rel_path']] = {
-                                        "hash": file_hash,
-                                        "mtime": stat.st_mtime,
-                                        "size": stat.st_size,
-                                        "is_archived": "(old)" in item['rel_path'].lower(),
-                                        "type": "file"
-                                    }
+                                res = process_single_file((item['rel_path'], item['path']))
+                                if res: state[res[0]] = res[1]
+        return state
                             
         return state
 

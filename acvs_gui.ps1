@@ -1,5 +1,5 @@
-﻿# Version: 0.2.7
-# Last Updated: Sat Feb 28 15:41:57 JST 2026
+﻿# Version: 0.2.9
+# Last Updated: Sat Feb 28 15:48:42 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -78,13 +78,12 @@ $btnLog.BackColor = [System.Drawing.Color]::LightGoldenrodYellow
 $btnLog.Font = $font_bold
 $form.Controls.Add($btnLog)
 
-$btnInit = New-Object Windows.Forms.Button
-$btnInit.Text = "Init (Setup)"
-$btnInit.Location = New-Object Drawing.Point(340, 85)
-$btnInit.Size = New-Object Drawing.Size(150, 30)
-$btnInit.BackColor = [System.Drawing.Color]::Orange
-$btnInit.Font = $font_bold
-$form.Controls.Add($btnInit)
+$progressBar = New-Object Windows.Forms.ProgressBar
+$progressBar.Location = New-Object Drawing.Point(20, 545)
+$progressBar.Size = New-Object Drawing.Size(740, 20)
+$progressBar.Style = "Continuous"
+$progressBar.Value = 0
+$form.Controls.Add($progressBar)
 
 $chkFast = New-Object Windows.Forms.CheckBox
 $chkFast.Text = "Fast Mode (Size+Time)"
@@ -135,31 +134,28 @@ function Set-UIState {
     $btnStatus.Enabled = $enabled
     $btnCommit.Enabled = $enabled
     $btnLog.Enabled = $enabled
-    $btnInit.Enabled = $enabled
     $txtRoot.Enabled = $enabled
     $txtCut.Enabled = $enabled
     $btnBrowse.Enabled = $enabled
 }
 
 function Invoke-ACVSCommand {
-    param([string]$command)
+    param([string]$command, [bool]$isRetry = $false)
     
     $targetDir = Get-TargetDir
-    
     if (-not (Test-Path $targetDir)) {
         $txtOutput.Text = "Error: Directory not found -> $targetDir"
         return
     }
     
-    # UIの無効化（二重実行防止）
     Set-UIState -enabled $false
-    $txtOutput.Text = "Running ACF-VS $command on $targetDir ...`r`n"
-    $txtOutput.Text += "Please wait (GUI will remain responsive)...`r`n`r`n"
+    if (-not $isRetry) { $txtOutput.Clear() }
+    $txtOutput.AppendText("Running ACF-VS $command on $targetDir ...`r`n")
+    $progressBar.Value = 0
     
     $cmdArgs = @($command, "--dir", "`"$targetDir`"")
     if ($chkFast.Checked) { $cmdArgs += "--fast" }
     if ($chkSeq.Checked) { $cmdArgs += "--seq" }
-    
     $fullArgs = $cmdArgs -join " "
     
     try {
@@ -171,35 +167,56 @@ function Invoke-ACVSCommand {
         $processInfo.UseShellExecute = $false
         $processInfo.CreateNoWindow = $true
         $processInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
-        $processInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
 
         $process = New-Object System.Diagnostics.Process
         $process.StartInfo = $processInfo
         $process.Start() | Out-Null
         
-        # 非同期待ちループ（DoEventsでGUIを動かし続ける）
+        $missingManifest = $false
+        
         while (-not $process.HasExited) {
+            while ($line = $process.StandardOutput.ReadLine()) {
+                if ($line -match "PROGRESS: (\d+)/(\d+)") {
+                    $current = [int]$matches[1]
+                    $total = [int]$matches[2]
+                    $progressBar.Maximum = $total
+                    $progressBar.Value = $current
+                }
+                elseif ($line -match "Fatal: .*\.cut_manifest\.json not found") {
+                    $missingManifest = $true
+                    $txtOutput.AppendText($line + "`r`n")
+                }
+                else {
+                    $txtOutput.AppendText($line + "`r`n")
+                }
+                [System.Windows.Forms.Application]::DoEvents()
+            }
             [System.Windows.Forms.Application]::DoEvents()
-            Start-Sleep -Milliseconds 100
+            Start-Sleep -Milliseconds 50
         }
         
-        $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
+        if ($stderr) { 
+            if ($stderr -match "not found") { $missingManifest = $true }
+            $txtOutput.AppendText("`r`nERROR:`r`n" + $stderr) 
+        }
         
-        if ($stdout) { $txtOutput.Text += $stdout }
-        if ($stderr) { $txtOutput.Text += "ERROR:`r`n" + $stderr }
-        
-        $txtOutput.Text += "`r`nDone."
-        
-        # 改行コードの調整
-        $txtOutput.Text = $txtOutput.Text -replace "`r`n", "`n" -replace "`r", "`n" -replace "`n", "`r`n"
-        
+        if ($missingManifest -and $command -ne "init") {
+            $msg = "このディレクトリはまだACF-VSで管理されていません。`r`n初期化（Init）して管理を開始しますか？"
+            $result = [System.Windows.Forms.MessageBox]::Show($msg, "初期化の確認", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
+            if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
+                Invoke-ACVSCommand -command "init" -isRetry $true
+                return
+            }
+        }
+
+        $txtOutput.AppendText("`r`nDone.")
+        $progressBar.Value = $progressBar.Maximum
     }
     catch {
-        $txtOutput.Text += "Failed to execute python script. Make sure python is in PATH and acvs_core.py exists next to this script."
+        $txtOutput.AppendText("`r`nFailed to execute python script.")
     }
     finally {
-        # UIの有効化
         Set-UIState -enabled $true
     }
 }
@@ -231,11 +248,6 @@ $btnCommit.Add_Click({
 # Logボタンの動作
 $btnLog.Add_Click({
         Invoke-ACVSCommand -command "log"
-    })
-
-# Initボタンの動作
-$btnInit.Add_Click({
-        Invoke-ACVSCommand -command "init"
     })
 
 # EnterキーでScanを実行する便利機能
