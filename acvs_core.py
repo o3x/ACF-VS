@@ -1,5 +1,5 @@
-# Version: 0.2.12
-# Last Updated: Sun Mar 01 18:25:56 JST 2026
+# Version: 0.2.13
+# Last Updated: Sun Mar 01 18:36:08 JST 2026
 
 import os
 import hashlib
@@ -103,12 +103,17 @@ class ACVSCore:
             for parent_dir, prefixes in seq_groups.items():
                 for prefix, exts in prefixes.items():
                     for ext, items in exts.items():
-                        if len(items) >= 3:
+                        # グループ構成の閾値を2枚以上に緩和
+                        if len(items) >= 2:
                             items.sort(key=lambda x: x['num'])
                             first_item = items[0]
                             last_item = items[-1]
                             num_format_len = len(first_item['num_str'])
-                            seq_name = f"{parent_dir}/{prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
+                            
+                            clean_prefix = prefix[:-1] if prefix.endswith('_') else prefix
+                            seq_base = f"{clean_prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
+                            seq_name = f"{parent_dir}/{seq_base}" if parent_dir else seq_base
+                            
                             head_hash = self.calculate_hash(first_item['path'], fast_mode=True)
                             group_hash = f"seq:{head_hash}:{len(items)}"
                             state[seq_name] = {
