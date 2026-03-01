@@ -1,5 +1,5 @@
-﻿# Version: 0.2.10
-# Last Updated: Sat Feb 28 15:57:13 JST 2026
+﻿# Version: 0.2.12
+# Last Updated: Sun Mar 01 18:25:56 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

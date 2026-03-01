@@ -1,5 +1,5 @@
-# Version: 0.2.10
-# Last Updated: Sat Feb 28 15:57:13 JST 2026
+# Version: 0.2.12
+# Last Updated: Sun Mar 01 18:25:56 JST 2026
 
 import os
 import hashlib
@@ -48,8 +48,9 @@ class ACVSCore:
         # 除外するディレクトリ名
         exclude_dirs = {'.git', '.acvs_history', '__pycache__', 'test_env'}
         
-        # 正規表現：プレフィックス _ 数字(1桁以上) . 拡張子
-        seq_pattern = re.compile(r'^(.*?)_([0-9]+)\.([a-zA-Z0-9]+)$')
+        # 正規表現：プレフィックス(任意の文字) + 数字(1桁以上) . 拡張子
+        # _0001 だけでなく i0001 のようなアンダーバー無しも許容する
+        seq_pattern = re.compile(r'^(.*?)([0-9]+)\.([a-zA-Z0-9]+)$')
 
         # 1. ファイル一覧の収集
         for root, dirs, files in os.walk(self.target_dir):
@@ -204,14 +205,17 @@ class ACVSCore:
         return {}
 
     def save_manifest(self, state):
+        # キー（ファイルパス）でソートして保存
+        sorted_state = {k: state[k] for k in sorted(state.keys())}
+        
         # マニフェストファイルにもバージョン情報を付加する
         manifest_data = {
             "_meta": {
                 "generator": "ACF-VS",
-                "schema_version": "1.0",
+                "schema_version": "1.0.1",
                 "updated_at": datetime.now().strftime("%Y%m%d_%H%M%S")
             },
-            "state": state
+            "state": sorted_state
         }
         with open(self.manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest_data, f, indent=4, ensure_ascii=False)
@@ -295,14 +299,17 @@ class ACVSCore:
         history_file = os.path.join(self.history_dir, f"{timestamp}.json")
         
         # メタデータを付加して保存
+        sorted_state = {k: new_state[k] for k in sorted(new_state.keys())}
         save_data = {
             "_meta": {
+                "generator": "ACF-VS",
+                "schema_version": "1.0.1",
                 "timestamp": timestamp,
                 "has_changes": has_changes,
                 "fast_mode": fast_mode,
                 "seq_grouped": group_seq
             },
-            "state": new_state
+            "state": sorted_state
         }
         
         # 以前のコミットが「無変更」だった場合、それを古紙として破棄（整理）する
