@@ -1,0 +1,21 @@
+
+--- Before Move ---
+Scanning 1 files...
+PROGRESS: 1/1
+Nothing to commit, working tree clean
+
+--- After Move ---
+Scanning 1 files...
+PROGRESS: 1/1
+
+Moved files:
+  [MOVED] dirA/test.txt -> dirB/test.txt
+
+--- After Copy (Original and New) ---
+Scanning 2 files...
+PROGRESS: 2/2
+New files:
+  [NEW] dirB/test.txt
+
+Warning: Redundant copies detected:
+  [DUPLICATE] Identical files: dirA/test.txt, dirB/test.txt

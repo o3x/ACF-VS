@@ -1,0 +1,16 @@
+{
+    "_meta": {
+        "generator": "ACF-VS",
+        "schema_version": "1.0.1",
+        "updated_at": "20260301_193117"
+    },
+    "state": {
+        "dirA/test.txt": {
+            "hash": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+            "mtime": 1772361077.8114035,
+            "size": 5,
+            "is_archived": false,
+            "type": "file"
+        }
+    }
+}

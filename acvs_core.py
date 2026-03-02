@@ -1,5 +1,5 @@
-# Version: 0.2.13
-# Last Updated: Sun Mar 01 18:36:08 JST 2026
+# Version: 0.2.15
+# Last Updated: Mon Mar 02 10:43:37 JST 2026
 
 import os
 import hashlib
@@ -114,11 +114,12 @@ class ACVSCore:
                             seq_base = f"{clean_prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
                             seq_name = f"{parent_dir}/{seq_base}" if parent_dir else seq_base
                             
-                            head_hash = self.calculate_hash(first_item['path'], fast_mode=True)
-                            group_hash = f"seq:{head_hash}:{len(items)}"
+                            total_size = sum(os.stat(i['path']).st_size for i in items)
+                            max_mtime = max(os.stat(i['path']).st_mtime for i in items)
+                            group_hash = f"seq:{total_size}:{max_mtime}:{len(items)}"
                             state[seq_name] = {
-                                "hash": group_hash, "mtime": os.stat(last_item['path']).st_mtime,
-                                "size": sum(os.stat(i['path']).st_size for i in items),
+                                "hash": group_hash, "mtime": max_mtime,
+                                "size": total_size,
                                 "is_archived": "(old)" in seq_name.lower(), "type": "sequence", "count": len(items)
                             }
                         else:
