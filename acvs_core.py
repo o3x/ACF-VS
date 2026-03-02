@@ -1,5 +1,5 @@
-# Version: 0.2.15
-# Last Updated: Mon Mar 02 10:43:37 JST 2026
+# Version: 0.2.16
+# Last Updated: Mon Mar 02 11:16:16 JST 2026
 
 import os
 import hashlib
@@ -298,9 +298,13 @@ class ACVSCore:
         
         has_changes = any(len(v) > 0 for k, v in changes.items() if k != "redundant_copies")
         
+        if not has_changes:
+            print("No changes detected since last commit. Commit skipped.")
+            return
+        
         self._ensure_history_dir()
         
-        # 履歴の保存ロジック (Smart Archive)
+        # 履歴の保存ロジック
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         history_file = os.path.join(self.history_dir, f"{timestamp}.json")
         
@@ -311,25 +315,12 @@ class ACVSCore:
                 "generator": "ACF-VS",
                 "schema_version": "1.0.1",
                 "timestamp": timestamp,
-                "has_changes": has_changes,
+                "has_changes": True,
                 "fast_mode": fast_mode,
                 "seq_grouped": group_seq
             },
             "state": sorted_state
         }
-        
-        # 以前のコミットが「無変更」だった場合、それを古紙として破棄（整理）する
-        # （常に最新の「無変更確認日時」か「意味のあるスナップショット」だけを残すため）
-        for hl in os.listdir(self.history_dir):
-            if hl.endswith('.json'):
-                hp = os.path.join(self.history_dir, hl)
-                try:
-                    with open(hp, 'r', encoding='utf-8') as f:
-                        h_data = json.load(f)
-                        if "_meta" in h_data and not h_data["_meta"].get("has_changes", True):
-                            os.remove(hp)
-                except Exception:
-                    pass
         
         # 今回の状態を履歴としてバックアップ
         with open(history_file, 'w', encoding='utf-8') as f:
@@ -338,10 +329,7 @@ class ACVSCore:
         # 最新の .cut_manifest.json を上書き
         self.save_manifest(new_state)
         
-        if has_changes:
-            print(f"Manifest updated successfully. Backup saved to .acvs_history/{timestamp}.json")
-        else:
-            print(f"No changes detected. Checked time recorded at .acvs_history/{timestamp}.json")
+        print(f"Manifest updated successfully. Backup saved to .acvs_history/{timestamp}.json")
 
     def log(self):
         """履歴(History)の一覧を表示する"""
