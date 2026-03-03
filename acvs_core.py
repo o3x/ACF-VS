@@ -1,5 +1,5 @@
-# Version: 0.2.16
-# Last Updated: Mon Mar 02 11:16:16 JST 2026
+# Version: 0.2.20
+# Last Updated: Tue Mar 03 19:15:49 JST 2026
 
 import os
 import hashlib
@@ -48,9 +48,9 @@ class ACVSCore:
         # 除外するディレクトリ名
         exclude_dirs = {'.git', '.acvs_history', '__pycache__', 'test_env'}
         
-        # 正規表現：プレフィックス(任意の文字) + 数字(1桁以上) . 拡張子
-        # _0001 だけでなく i0001 のようなアンダーバー無しも許容する
-        seq_pattern = re.compile(r'^(.*?)([0-9]+)\.([a-zA-Z0-9]+)$')
+        # 正規表現：プレフィックス(任意の文字) + 数字(4桁以上) . 拡張子
+        # _0001 だけでなく i0001 のようなアンダーバー無しも許容するが、テイク番号（t01など）と区別するため4桁以上とする
+        seq_pattern = re.compile(r'^(.*?)([0-9]{4,})\.([a-zA-Z0-9]+)$')
 
         # 1. ファイル一覧の収集
         for root, dirs, files in os.walk(self.target_dir):
@@ -163,38 +163,47 @@ class ACVSCore:
                 changes["redundant_copies"].append(paths)
 
         processed_old_paths = set()
+        processed_new_paths = set()
 
-        # 新規・更新・移動の判定
+        # Pass 1: 完全一致（パスもハッシュも同じ）のファイルを先に処理済みにする
         for path, info in new_state.items():
-            if path not in old_state:
-                # 移動したかどうかのチェック
-                h = info["hash"]
-                if h in old_hashes:
-                    # 同じハッシュを持つ古いファイルを探す
-                    moved_from = None
-                    for op in old_hashes[h]:
-                        if op not in new_state and op not in processed_old_paths:
-                            moved_from = op
-                            break
-                    
-                    if moved_from:
-                        processed_old_paths.add(moved_from)
-                        if not old_state[moved_from]['is_archived'] and info['is_archived']:
-                            changes["moved_to_archive"].append({"from": moved_from, "to": path})
-                        else:
-                            changes["moved"].append({"from": moved_from, "to": path})
+            if path in old_state and old_state[path]["hash"] == info["hash"]:
+                processed_old_paths.add(path)
+                processed_new_paths.add(path)
+
+        # Pass 2: 移動の検出（パスは違うがハッシュが同じ）
+        for path, info in new_state.items():
+            if path in processed_new_paths:
+                continue
+                
+            h = info["hash"]
+            if h in old_hashes:
+                # 同じハッシュを持つ古いファイルの中で、まだ処理されていないものを探す
+                moved_from = None
+                for op in old_hashes[h]:
+                    if op not in processed_old_paths:
+                        moved_from = op
+                        break
+                
+                if moved_from:
+                    processed_old_paths.add(moved_from)
+                    processed_new_paths.add(path)
+                    if not old_state[moved_from]['is_archived'] and info['is_archived']:
+                        changes["moved_to_archive"].append({"from": moved_from, "to": path})
                     else:
-                        changes["new"].append(path)
+                        changes["moved"].append({"from": moved_from, "to": path})
+
+        # Pass 3: 新規・更新の判定
+        for path, info in new_state.items():
+            if path not in processed_new_paths:
+                if path in old_state:
+                    changes["updated"].append(path)
+                    processed_old_paths.add(path)
                 else:
                     changes["new"].append(path)
-            else:
-                # パスが同じ場合
-                if old_state[path]["hash"] != info["hash"]:
-                    changes["updated"].append(path)
-                processed_old_paths.add(path)
                     
-        # 削除の判定
-        for path, info in old_state.items():
+        # Pass 4: 削除の判定
+        for path in old_state:
             if path not in processed_old_paths:
                 changes["deleted"].append(path)
                 
