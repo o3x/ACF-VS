@@ -1,5 +1,5 @@
-# Version: 0.2.20
-# Last Updated: Tue Mar 03 19:15:49 JST 2026
+# Version: 0.3.0
+# Last Updated: Wed Mar 04 10:57:36 JST 2026
 
 import os
 import hashlib
@@ -369,36 +369,62 @@ class ACVSCore:
             except Exception as e:
                 print(f"Error reading {hf}: {e}")
 
-    def diff(self, timestamp, fast_mode=False, group_seq=False):
-        """指定した過去の日時の状態と現在の状態を比較して差分を表示する"""
-        if not os.path.exists(self.history_dir):
-            print("Fatal: No history directory found.")
-            return
+    def diff(self, target1=None, target2=None, fast_mode=False, group_seq=False):
+        """指定した過去の日時の状態と現在の状態、または2つの過去の状態を比較して差分を表示する"""
+        if not os.path.exists(self.history_dir) or not os.listdir(self.history_dir):
+            if not target1 and not target2:
+                print("No history found. Comparing with the latest manifest instead (same as status).")
+                self.status(fast_mode=fast_mode, group_seq=group_seq)
+                return
+            else:
+                print("Fatal: No history directory found.")
+                return
 
-        target_file = os.path.join(self.history_dir, f"{timestamp}.json")
-        if not os.path.exists(target_file):
-            print(f"Fatal: History for '{timestamp}' not found.")
-            # 似たようなタイムスタンプを提案する機能
-            available = [f.replace('.json', '') for f in os.listdir(self.history_dir) if f.endswith('.json')]
-            if available:
-                print("Available history timestamps:")
-                for a in sorted(available, reverse=True):
-                    print(f"  {a}")
-            return
-            
-        print(f"Comparing current state against history: {timestamp} ...\n")
-        
-        try:
-            with open(target_file, 'r', encoding='utf-8') as f:
-                history_data = json.load(f)
-                old_state = history_data.get("state", {})
-        except Exception as e:
-            print(f"Error reading history file: {e}")
-            return
-            
-        # 現在の状態を取得
-        new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
-        
+        def get_history_state(ts):
+            target_file = os.path.join(self.history_dir, f"{ts}.json")
+            if not os.path.exists(target_file):
+                print(f"Fatal: History for '{ts}' not found.")
+                return None
+            try:
+                with open(target_file, 'r', encoding='utf-8') as f:
+                    history_data = json.load(f)
+                    return history_data.get("state", {})
+            except Exception as e:
+                print(f"Error reading history file '{ts}': {e}")
+                return None
+
+        # Determine old_state and new_state
+        if target1 and target2:
+            # 2 targets: sort them so old is first
+            t_list = sorted([target1, target2])
+            older_ts = t_list[0]
+            newer_ts = t_list[1]
+            print(f"Comparing two historical states: {older_ts} (old) -> {newer_ts} (new) ...\n")
+            old_state = get_history_state(older_ts)
+            new_state = get_history_state(newer_ts)
+            if old_state is None or new_state is None:
+                return
+        elif target1 and not target2:
+            # 1 target: target1 vs current
+            print(f"Comparing historical state: {target1} (old) -> Current State (new) ...\n")
+            old_state = get_history_state(target1)
+            if old_state is None:
+                return
+            new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
+        else:
+            # 0 targets: latest history vs current
+            history_files = sorted([f for f in os.listdir(self.history_dir) if f.endswith('.json')], reverse=True)
+            if not history_files:
+                print("No history found. Comparing with the latest manifest instead (same as status).")
+                self.status(fast_mode=fast_mode, group_seq=group_seq)
+                return
+            latest_ts = history_files[0].replace('.json', '')
+            print(f"Comparing latest history: {latest_ts} (old) -> Current State (new) ...\n")
+            old_state = get_history_state(latest_ts)
+            if old_state is None:
+                return
+            new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
+
         # 比較
         changes = self.compare_states(old_state, new_state)
         
@@ -406,41 +432,41 @@ class ACVSCore:
         
         if changes["new"]:
             has_changes = True
-            print("New files (since history):")
+            print("New files:")
             for p in changes["new"]:
                 print(f"  [NEW] {p}")
                 
         if changes["updated"]:
             has_changes = True
-            print("\nUpdated files (since history):")
+            print("\nUpdated files:")
             for p in changes["updated"]:
                 print(f"  [UPDATED] {p}")
                 
         if changes["moved"]:
             has_changes = True
-            print("\nMoved files (since history):")
+            print("\nMoved files:")
             for m in changes["moved"]:
                 print(f"  [MOVED] {m['from']} -> {m['to']}")
                 
         if changes["moved_to_archive"]:
             has_changes = True
-            print("\nArchived files (since history):")
+            print("\nArchived files:")
             for m in changes["moved_to_archive"]:
                 print(f"  [ARCHIVED (old)] {m['from']} -> {m['to']}")
                 
         if changes["deleted"]:
             has_changes = True
-            print("\nDeleted files (since history):")
+            print("\nDeleted files:")
             for p in changes["deleted"]:
                 print(f"  [DELETED] {p}")
                 
         if changes["redundant_copies"]:
-            print("\nWarning: Redundant copies detected in current state:")
+            print("\nWarning: Redundant copies detected in newer state:")
             for copies in changes["redundant_copies"]:
                 print(f"  [DUPLICATE] Identical files: {', '.join(copies)}")
                 
         if not has_changes:
-            print("No changes compared to the specified history.")
+            print("No changes compared to the specified state.")
 
 def main():
     # 強制的に標準出力をUTF-8にして、PowerShell側での文字化け（Mojibake）を防ぐ
@@ -455,7 +481,7 @@ def main():
     parser.add_argument('--dir', default='.', help='Target directory (default: current directory)')
     parser.add_argument('--fast', action='store_true', help='Use fast mode (size+mtime instead of full hash)')
     parser.add_argument('--seq', action='store_true', help='Group sequence files (e.g. name_001.tga) into a single entry')
-    parser.add_argument('--target', help='Target timestamp for diff command (e.g., 20260227_182939)')
+    parser.add_argument('--target', nargs='*', help='Target timestamp(s) for diff command (0 to 2 targets)')
     
     args = parser.parse_args()
     
@@ -476,11 +502,14 @@ def main():
     elif args.command == 'log':
         acvs.log()
     elif args.command == 'diff':
-        if not args.target:
-            print("Error: --target timestamp is required for diff command.")
-            acvs.log() # 候補を表示してあげる
+        targets = args.target if args.target else []
+        if len(targets) > 2:
+            print("Error: Too many targets specified for diff. Maximum is 2.")
+            acvs.log()
         else:
-            acvs.diff(args.target, fast_mode=args.fast, group_seq=args.seq)
+            t1 = targets[0] if len(targets) > 0 else None
+            t2 = targets[1] if len(targets) > 1 else None
+            acvs.diff(t1, t2, fast_mode=args.fast, group_seq=args.seq)
 
 if __name__ == "__main__":
     main()
