@@ -388,7 +388,9 @@ class ACVSCore:
             try:
                 with open(target_file, 'r', encoding='utf-8') as f:
                     history_data = json.load(f)
-                    return history_data.get("state", {})
+                    if "_meta" in history_data and "state" in history_data:
+                        return history_data["state"]
+                    return history_data
             except Exception as e:
                 print(f"Error reading history file '{ts}': {e}")
                 return None
