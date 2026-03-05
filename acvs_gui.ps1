@@ -1,5 +1,5 @@
-﻿# Version: 0.2.20
-# Last Updated: Tue Mar 03 19:15:49 JST 2026
+﻿# Version: 0.3.0
+# Last Updated: Wed Mar 04 10:57:36 JST 2026
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -57,26 +57,34 @@ $form.Controls.Add($txtCut)
 $btnStatus = New-Object Windows.Forms.Button
 $btnStatus.Text = "Scan (Status)"
 $btnStatus.Location = New-Object Drawing.Point(20, 130)
-$btnStatus.Size = New-Object Drawing.Size(150, 35)
+$btnStatus.Size = New-Object Drawing.Size(120, 35)
 $btnStatus.BackColor = [System.Drawing.Color]::LightBlue
 $btnStatus.Font = $font_bold
 $form.Controls.Add($btnStatus)
 
 $btnCommit = New-Object Windows.Forms.Button
 $btnCommit.Text = "Commit (Save)"
-$btnCommit.Location = New-Object Drawing.Point(180, 130)
-$btnCommit.Size = New-Object Drawing.Size(150, 35)
+$btnCommit.Location = New-Object Drawing.Point(150, 130)
+$btnCommit.Size = New-Object Drawing.Size(120, 35)
 $btnCommit.BackColor = [System.Drawing.Color]::LightGreen
 $btnCommit.Font = $font_bold
 $form.Controls.Add($btnCommit)
 
 $btnLog = New-Object Windows.Forms.Button
 $btnLog.Text = "History Log"
-$btnLog.Location = New-Object Drawing.Point(340, 130)
-$btnLog.Size = New-Object Drawing.Size(150, 35)
+$btnLog.Location = New-Object Drawing.Point(280, 130)
+$btnLog.Size = New-Object Drawing.Size(120, 35)
 $btnLog.BackColor = [System.Drawing.Color]::LightGoldenrodYellow
 $btnLog.Font = $font_bold
 $form.Controls.Add($btnLog)
+
+$btnDiff = New-Object Windows.Forms.Button
+$btnDiff.Text = "Diff (Compare)"
+$btnDiff.Location = New-Object Drawing.Point(410, 130)
+$btnDiff.Size = New-Object Drawing.Size(120, 35)
+$btnDiff.BackColor = [System.Drawing.Color]::LightPink
+$btnDiff.Font = $font_bold
+$form.Controls.Add($btnDiff)
 
 $progressBar = New-Object Windows.Forms.ProgressBar
 $progressBar.Location = New-Object Drawing.Point(20, 545)
@@ -87,14 +95,14 @@ $form.Controls.Add($progressBar)
 
 $chkFast = New-Object Windows.Forms.CheckBox
 $chkFast.Text = "Fast Mode (Size+Time)"
-$chkFast.Location = New-Object Drawing.Point(510, 125)
+$chkFast.Location = New-Object Drawing.Point(540, 125)
 $chkFast.AutoSize = $true
 $chkFast.Checked = $true
 $form.Controls.Add($chkFast)
 
 $chkSeq = New-Object Windows.Forms.CheckBox
 $chkSeq.Text = "Group Seq Images"
-$chkSeq.Location = New-Object Drawing.Point(510, 145)
+$chkSeq.Location = New-Object Drawing.Point(540, 145)
 $chkSeq.AutoSize = $true
 $chkSeq.Checked = $true
 $form.Controls.Add($chkSeq)
@@ -109,7 +117,7 @@ $form.Controls.Add($labelOutput)
 
 $txtOutput = New-Object Windows.Forms.TextBox
 $txtOutput.Location = New-Object Drawing.Point(20, 205)
-$txtOutput.Size = New-Object Drawing.Size(740, 330)
+$txtOutput.Size = New-Object Drawing.Size(510, 330)
 $txtOutput.Multiline = $true
 $txtOutput.ScrollBars = "Vertical"
 $txtOutput.Font = $font_console
@@ -117,6 +125,19 @@ $txtOutput.ReadOnly = $true
 $txtOutput.BackColor = [System.Drawing.Color]::Black
 $txtOutput.ForeColor = [System.Drawing.Color]::LightGreen
 $form.Controls.Add($txtOutput)
+
+$labelHistory = New-Object Windows.Forms.Label
+$labelHistory.Text = "履歴一覧 (History):"
+$labelHistory.Location = New-Object Drawing.Point(540, 180)
+$labelHistory.AutoSize = $true
+$form.Controls.Add($labelHistory)
+
+$listHistory = New-Object Windows.Forms.ListBox
+$listHistory.Location = New-Object Drawing.Point(540, 205)
+$listHistory.Size = New-Object Drawing.Size(220, 330)
+$listHistory.SelectionMode = "MultiExtended"
+$listHistory.Font = $font_main
+$form.Controls.Add($listHistory)
 
 # --- イベントの設定 ---
 
@@ -134,13 +155,19 @@ function Set-UIState {
     $btnStatus.Enabled = $enabled
     $btnCommit.Enabled = $enabled
     $btnLog.Enabled = $enabled
+    $btnDiff.Enabled = $enabled
     $txtRoot.Enabled = $enabled
     $txtCut.Enabled = $enabled
     $btnBrowse.Enabled = $enabled
+    $listHistory.Enabled = $enabled
 }
 
 function Invoke-ACVSCommand {
-    param([string]$command, [bool]$isRetry = $false)
+    param(
+        [string]$command, 
+        [bool]$isRetry = $false,
+        [string[]]$targets = @()
+    )
     
     $targetDir = Get-TargetDir
     if (-not (Test-Path $targetDir)) {
@@ -156,6 +183,12 @@ function Invoke-ACVSCommand {
     $cmdArgs = @($command, "--dir", "`"$targetDir`"")
     if ($chkFast.Checked) { $cmdArgs += "--fast" }
     if ($chkSeq.Checked) { $cmdArgs += "--seq" }
+    if ($targets.Count -gt 0) {
+        $cmdArgs += "--target"
+        foreach ($t in $targets) {
+            $cmdArgs += "`"$t`""
+        }
+    }
     $fullArgs = $cmdArgs -join " "
     
     try {
@@ -222,6 +255,21 @@ function Invoke-ACVSCommand {
     }
     finally {
         Set-UIState -enabled $true
+        # Update history list when log is fetched
+        if ($command -eq "log" -or (($command -eq "commit" -or $command -eq "init") -and $txtOutput.Text -match "Backup saved|Initialized")) {
+            if ($command -eq "log") {
+                $listHistory.Items.Clear()
+                foreach ($line in $txtOutput.Lines) {
+                    if ($line -match "^\[\d{8}_\d{6}\]") {
+                        $listHistory.Items.Add($line) | Out-Null
+                    }
+                }
+            }
+            else {
+                # auto refresh after commit
+                Invoke-ACVSCommand -command "log"
+            }
+        }
     }
 }
 
@@ -252,6 +300,22 @@ $btnCommit.Add_Click({
 # Logボタンの動作
 $btnLog.Add_Click({
         Invoke-ACVSCommand -command "log"
+    })
+
+# Diffボタンの動作
+$btnDiff.Add_Click({
+        $selected = $listHistory.SelectedItems
+        $targets = @()
+        foreach ($item in $selected) {
+            if ($item -match "^\[(\d{8}_\d{6})\]") {
+                $targets += $matches[1]
+            }
+        }
+        if ($targets.Count -gt 2) {
+            [System.Windows.Forms.MessageBox]::Show("比較対象は最大2つまで選択してください。", "エラー", "OK", "Warning") | Out-Null
+            return
+        }
+        Invoke-ACVSCommand -command "diff" -targets $targets
     })
 
 # EnterキーでScanを実行する便利機能
