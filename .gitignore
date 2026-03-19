@@ -1,6 +1,6 @@
 # ACF-VS Ignore File
 
-# Scripts and manifest
+# Scripts and manifest (明示的に追跡する)
 !acvs_core.py
 !.cut_manifest.json
 
@@ -25,3 +25,16 @@ venv/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# プロジェクト内設定（リポジトリに含めない）
+CLAUDE.md
+.gitignore
+
+# テスト用フォルダ・出力ファイル
+test_deletion/
+test_seq/
+output.txt
+output_utf8.txt
+test_move2_output.txt
+git_status.txt
+git_status_utf8.txt
