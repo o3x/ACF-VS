@@ -1,5 +1,5 @@
-# Version: 0.3.0
-# Last Updated: Wed Mar 04 10:57:36 JST 2026
+# Version: 0.3.2
+# Last Updated: Fri Jun 12 11:53:16 JST 2026
 
 import os
 import hashlib
@@ -126,8 +126,6 @@ class ACVSCore:
                             for item in items:
                                 res = process_single_file((item['rel_path'], item['path']))
                                 if res: state[res[0]] = res[1]
-        return state
-                            
         return state
 
     def compare_states(self, old_state, new_state):
