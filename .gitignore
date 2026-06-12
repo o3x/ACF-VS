@@ -27,7 +27,6 @@ venv/
 Thumbs.db
 
 # プロジェクト内設定（リポジトリに含めない）
-CLAUDE.md
 .gitignore
 
 # テスト用フォルダ・出力ファイル
