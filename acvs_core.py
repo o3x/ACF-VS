@@ -43,28 +43,34 @@ class ACVSCore:
         except OSError:
             return None
 
-    def scan_directory(self, fast_mode=False, group_seq=False):
-        """ディレクトリ以下を再帰的に走査し、現在の状態を取得する。"""
-        state = {}
+    def _hash_single(self, rel_path, file_path, fast_mode):
+        """単一ファイルのハッシュとメタ情報を計算し (rel_path, アイテム辞書) を返す。読めない場合は None"""
+        h = self.calculate_hash(file_path, fast_mode=fast_mode)
+        if h:
+            st = os.stat(file_path)
+            return rel_path, {"hash": h, "mtime": st.st_mtime, "size": st.st_size, "is_archived": "(old)" in rel_path.lower(), "type": "file"}
+        return None
+
+    def _collect_files(self, group_seq):
+        """os.walk で走査し、(通常ファイルリスト, 連番グループ辞書) を返す"""
         seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
         files_to_process = []
-        
+
         # 正規表現：プレフィックス(任意の文字) + 数字(4桁以上) . 拡張子
         # _0001 だけでなく i0001 のようなアンダーバー無しも許容するが、テイク番号（t01など）と区別するため4桁以上とする
         seq_pattern = re.compile(r'^(.*?)([0-9]{4,})\.([a-zA-Z0-9]+)$')
 
-        # 1. ファイル一覧の収集
         for root, dirs, files in os.walk(self.target_dir):
             dirs[:] = [d for d in dirs if d not in self.EXCLUDE_DIRS]
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.target_dir)
-                
+
                 if rel_path.startswith('.cut_manifest') or file in self.EXCLUDE_FILES:
                     continue
-                
+
                 rel_path = rel_path.replace('\\', '/')
-                
+
                 if group_seq:
                     match = seq_pattern.match(file)
                     if match:
@@ -74,22 +80,19 @@ class ACVSCore:
                             'filename': file, 'path': file_path, 'rel_path': rel_path, 'num': int(num_str), 'num_str': num_str
                         })
                         continue
-                
+
                 files_to_process.append((rel_path, file_path))
 
-        # 2. ハッシュ計算（並列実行）
+        return files_to_process, seq_groups
+
+    def _hash_files(self, files_to_process, fast_mode):
+        """並列ハッシュ計算。PROGRESS 行の出力仕様（10件ごと＋最終件）はGUIが依存するため変更しないこと"""
+        state = {}
         total_files = len(files_to_process)
-        def process_single_file(item):
-            rel_path, file_path = item
-            h = self.calculate_hash(file_path, fast_mode=fast_mode)
-            if h:
-                st = os.stat(file_path)
-                return rel_path, {"hash": h, "mtime": st.st_mtime, "size": st.st_size, "is_archived": "(old)" in rel_path.lower(), "type": "file"}
-            return None
 
         print(f"Scanning {total_files} files...")
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(process_single_file, f) for f in files_to_process]
+            futures = [executor.submit(self._hash_single, rel_path, file_path, fast_mode) for rel_path, file_path in files_to_process]
             for i, future in enumerate(concurrent.futures.as_completed(futures)):
                 result = future.result()
                 if result:
@@ -99,34 +102,43 @@ class ACVSCore:
                 if (i + 1) % 10 == 0 or (i + 1) == total_files:
                     print(f"PROGRESS: {i+1}/{total_files}")
 
-        # 3. 連番グループの処理
+        return state
+
+    def _group_sequences(self, seq_groups, state, fast_mode):
+        """連番グループを state のエントリにする。2枚未満のグループは通常ファイルとして処理する"""
+        for parent_dir, prefixes in seq_groups.items():
+            for prefix, exts in prefixes.items():
+                for ext, items in exts.items():
+                    # グループ構成の閾値を2枚以上に緩和
+                    if len(items) >= 2:
+                        items.sort(key=lambda x: x['num'])
+                        first_item = items[0]
+                        last_item = items[-1]
+                        num_format_len = len(first_item['num_str'])
+
+                        clean_prefix = prefix[:-1] if prefix.endswith('_') else prefix
+                        seq_base = f"{clean_prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
+                        seq_name = f"{parent_dir}/{seq_base}" if parent_dir else seq_base
+
+                        total_size = sum(os.stat(i['path']).st_size for i in items)
+                        max_mtime = max(os.stat(i['path']).st_mtime for i in items)
+                        group_hash = f"seq:{total_size}:{max_mtime}:{len(items)}"
+                        state[seq_name] = {
+                            "hash": group_hash, "mtime": max_mtime,
+                            "size": total_size,
+                            "is_archived": "(old)" in seq_name.lower(), "type": "sequence", "count": len(items)
+                        }
+                    else:
+                        for item in items:
+                            res = self._hash_single(item['rel_path'], item['path'], fast_mode)
+                            if res: state[res[0]] = res[1]
+
+    def scan_directory(self, fast_mode=False, group_seq=False):
+        """ディレクトリ以下を再帰的に走査し、現在の状態を取得する。"""
+        files_to_process, seq_groups = self._collect_files(group_seq)
+        state = self._hash_files(files_to_process, fast_mode)
         if group_seq:
-            for parent_dir, prefixes in seq_groups.items():
-                for prefix, exts in prefixes.items():
-                    for ext, items in exts.items():
-                        # グループ構成の閾値を2枚以上に緩和
-                        if len(items) >= 2:
-                            items.sort(key=lambda x: x['num'])
-                            first_item = items[0]
-                            last_item = items[-1]
-                            num_format_len = len(first_item['num_str'])
-                            
-                            clean_prefix = prefix[:-1] if prefix.endswith('_') else prefix
-                            seq_base = f"{clean_prefix}_[{str(first_item['num']).zfill(num_format_len)}-{str(last_item['num']).zfill(num_format_len)}].{ext}"
-                            seq_name = f"{parent_dir}/{seq_base}" if parent_dir else seq_base
-                            
-                            total_size = sum(os.stat(i['path']).st_size for i in items)
-                            max_mtime = max(os.stat(i['path']).st_mtime for i in items)
-                            group_hash = f"seq:{total_size}:{max_mtime}:{len(items)}"
-                            state[seq_name] = {
-                                "hash": group_hash, "mtime": max_mtime,
-                                "size": total_size,
-                                "is_archived": "(old)" in seq_name.lower(), "type": "sequence", "count": len(items)
-                            }
-                        else:
-                            for item in items:
-                                res = process_single_file((item['rel_path'], item['path']))
-                                if res: state[res[0]] = res[1]
+            self._group_sequences(seq_groups, state, fast_mode)
         return state
 
     def compare_states(self, old_state, new_state):
