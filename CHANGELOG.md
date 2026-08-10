@@ -2,6 +2,21 @@
 
 すべての顕著な変更はこのファイルに記録されます。
 
+## [0.3.3] - Mon Aug 10 21:54:03 JST 2026
+### Added
+- `tests/test_characterization.py`: CLI境界（subprocess）の特性テスト15本を追加しました。GUI（`acvs_gui.ps1`）が正規表現でパースする出力プロトコル（`PROGRESS:` 行・`Fatal:` 行・`[NEW]` 等のタグ表記・`Backup saved`・`Initialized`・log の `[YYYYMMDD_HHMMSS]` 行頭）をテストで固定し、リファクタリングによる破壊を防止します。unittest + 標準ライブラリのみ使用（外部依存ゼロの規約を維持）。
+
+### Changed
+- `acvs_core.py`: `status` と `diff` でほぼ完全に重複していた結果表示ブロック（約40行×2）を `print_changes()` メソッドに統合しました。表示文字列・空行位置は一切変更していません。
+- `acvs_core.py`: 走査除外の直値を `EXCLUDE_DIRS` / `EXCLUDE_FILES` クラス定数に抽出しました。これに伴い、従来「ルート直下のみ」だった `.gitignore` の除外が全階層に広がっています（カットフォルダのサブディレクトリに `.gitignore` を置く運用は存在しないため許容）。
+- `acvs_core.py`: 87行あった `scan_directory()` をファイル収集（`_collect_files`）・並列ハッシュ計算（`_hash_files`）・連番グループ化（`_group_sequences`）の3メソッドに分割しました。単一ファイル処理は `_hash_single()` として独立させ、両者から共用しています。処理順・出力は不変です。
+- `acvs_core.py`: 全メソッドと `main()` のシグネチャに型ヒント（Python 3.10+ の `X | None`・組み込みジェネリクス記法）を付与しました。実行時の挙動に影響はありません。
+
+### Fixed
+- `acvs_core.py`: `.cut_manifest.json` が破損（不正JSON）している場合に Traceback で即死していた問題を修正しました。対処方法（履歴からの復元または再 init）のヒントを表示して終了コード1で安全に停止します。エラーメッセージは GUI の自動 Init 判定（`not found` の正規表現）に誤マッチしない文言にしています。
+
+出力プロトコル・マニフェストスキーマの変更なし（`schema_version` 1.0.1 のまま）。
+
 ## [0.3.2] - Fri Jun 12 11:53:16 JST 2026
 ### Fixed
 - `MANIFEST_SPEC.md`: v0.2.14 のコード変更に追従していなかった仕様書の記述を2件修正しました。連番グループ化の閾値を「3ファイル以上」から実装どおりの「2ファイル以上」に、連番代表ハッシュの形式を旧記述（`seq:<先頭フレームのfast_hash>:<枚数>`）から実装どおりの `seq:<合計サイズ>:<最大mtime>:<枚数>` に修正しました（JSON構造自体は不変のため `schema_version` は `1.0.1` のまま）。あわせて見出し番号の乱れ（`2-A`/`2-B`/重複した `3.`）を連番に整理しました。
