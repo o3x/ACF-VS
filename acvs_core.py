@@ -207,6 +207,48 @@ class ACVSCore:
                 
         return changes
 
+    def print_changes(self, changes, no_change_message, duplicate_header):
+        """差分判定結果を表示する。表示文字列はGUIとユーザーが依存するため変更禁止。"""
+        has_changes = False
+
+        if changes["new"]:
+            has_changes = True
+            print("New files:")
+            for p in changes["new"]:
+                print(f"  [NEW] {p}")
+
+        if changes["updated"]:
+            has_changes = True
+            print("\nUpdated files:")
+            for p in changes["updated"]:
+                print(f"  [UPDATED] {p}")
+
+        if changes["moved"]:
+            has_changes = True
+            print("\nMoved files:")
+            for m in changes["moved"]:
+                print(f"  [MOVED] {m['from']} -> {m['to']}")
+
+        if changes["moved_to_archive"]:
+            has_changes = True
+            print("\nArchived files:")
+            for m in changes["moved_to_archive"]:
+                print(f"  [ARCHIVED (old)] {m['from']} -> {m['to']}")
+
+        if changes["deleted"]:
+            has_changes = True
+            print("\nDeleted files:")
+            for p in changes["deleted"]:
+                print(f"  [DELETED] {p}")
+
+        if changes["redundant_copies"]:
+            print(f"\n{duplicate_header}")
+            for copies in changes["redundant_copies"]:
+                print(f"  [DUPLICATE] Identical files: {', '.join(copies)}")
+
+        if not has_changes:
+            print(no_change_message)
+
     def load_manifest(self):
         if os.path.exists(self.manifest_path):
             with open(self.manifest_path, 'r', encoding='utf-8') as f:
@@ -254,46 +296,10 @@ class ACVSCore:
             return
             
         changes, _ = self.scan(fast_mode=fast_mode, group_seq=group_seq)
-        
-        has_changes = False
-        
-        if changes["new"]:
-            has_changes = True
-            print("New files:")
-            for p in changes["new"]:
-                print(f"  [NEW] {p}")
-                
-        if changes["updated"]:
-            has_changes = True
-            print("\nUpdated files:")
-            for p in changes["updated"]:
-                print(f"  [UPDATED] {p}")
-                
-        if changes["moved"]:
-            has_changes = True
-            print("\nMoved files:")
-            for m in changes["moved"]:
-                print(f"  [MOVED] {m['from']} -> {m['to']}")
-                
-        if changes["moved_to_archive"]:
-            has_changes = True
-            print("\nArchived files:")
-            for m in changes["moved_to_archive"]:
-                print(f"  [ARCHIVED (old)] {m['from']} -> {m['to']}")
-                
-        if changes["deleted"]:
-            has_changes = True
-            print("\nDeleted files:")
-            for p in changes["deleted"]:
-                print(f"  [DELETED] {p}")
-                
-        if changes["redundant_copies"]:
-            print("\nWarning: Redundant copies detected:")
-            for copies in changes["redundant_copies"]:
-                print(f"  [DUPLICATE] Identical files: {', '.join(copies)}")
-                
-        if not has_changes:
-            print("Nothing to commit, working tree clean")
+
+        self.print_changes(changes,
+            no_change_message="Nothing to commit, working tree clean",
+            duplicate_header="Warning: Redundant copies detected:")
 
     def commit(self, fast_mode=False, group_seq=False):
         if not os.path.exists(self.manifest_path):
@@ -427,46 +433,10 @@ class ACVSCore:
 
         # 比較
         changes = self.compare_states(old_state, new_state)
-        
-        has_changes = False
-        
-        if changes["new"]:
-            has_changes = True
-            print("New files:")
-            for p in changes["new"]:
-                print(f"  [NEW] {p}")
-                
-        if changes["updated"]:
-            has_changes = True
-            print("\nUpdated files:")
-            for p in changes["updated"]:
-                print(f"  [UPDATED] {p}")
-                
-        if changes["moved"]:
-            has_changes = True
-            print("\nMoved files:")
-            for m in changes["moved"]:
-                print(f"  [MOVED] {m['from']} -> {m['to']}")
-                
-        if changes["moved_to_archive"]:
-            has_changes = True
-            print("\nArchived files:")
-            for m in changes["moved_to_archive"]:
-                print(f"  [ARCHIVED (old)] {m['from']} -> {m['to']}")
-                
-        if changes["deleted"]:
-            has_changes = True
-            print("\nDeleted files:")
-            for p in changes["deleted"]:
-                print(f"  [DELETED] {p}")
-                
-        if changes["redundant_copies"]:
-            print("\nWarning: Redundant copies detected in newer state:")
-            for copies in changes["redundant_copies"]:
-                print(f"  [DUPLICATE] Identical files: {', '.join(copies)}")
-                
-        if not has_changes:
-            print("No changes compared to the specified state.")
+
+        self.print_changes(changes,
+            no_change_message="No changes compared to the specified state.",
+            duplicate_header="Warning: Redundant copies detected in newer state:")
 
 def main():
     # 強制的に標準出力をUTF-8にして、PowerShell側での文字化け（Mojibake）を防ぐ
