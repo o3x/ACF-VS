@@ -12,6 +12,10 @@ import concurrent.futures
 from datetime import datetime
 
 class ACVSCore:
+    # 走査から除外するディレクトリ名／ファイル名（管理用メタデータと自身のスクリプト）
+    EXCLUDE_DIRS = {'.git', '.acvs_history', '__pycache__', 'test_env'}
+    EXCLUDE_FILES = {'.gitignore', 'acvs_core.py', 'test_seq_generator.py'}
+
     def __init__(self, target_dir):
         self.target_dir = os.path.abspath(target_dir)
         self.manifest_path = os.path.join(self.target_dir, '.cut_manifest.json')
@@ -45,21 +49,18 @@ class ACVSCore:
         seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
         files_to_process = []
         
-        # 除外するディレクトリ名
-        exclude_dirs = {'.git', '.acvs_history', '__pycache__', 'test_env'}
-        
         # 正規表現：プレフィックス(任意の文字) + 数字(4桁以上) . 拡張子
         # _0001 だけでなく i0001 のようなアンダーバー無しも許容するが、テイク番号（t01など）と区別するため4桁以上とする
         seq_pattern = re.compile(r'^(.*?)([0-9]{4,})\.([a-zA-Z0-9]+)$')
 
         # 1. ファイル一覧の収集
         for root, dirs, files in os.walk(self.target_dir):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            dirs[:] = [d for d in dirs if d not in self.EXCLUDE_DIRS]
             for file in files:
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, self.target_dir)
                 
-                if rel_path.startswith('.cut_manifest') or rel_path == '.gitignore' or file == 'acvs_core.py' or file == 'test_seq_generator.py':
+                if rel_path.startswith('.cut_manifest') or file in self.EXCLUDE_FILES:
                     continue
                 
                 rel_path = rel_path.replace('\\', '/')
