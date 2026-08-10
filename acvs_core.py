@@ -252,12 +252,20 @@ class ACVSCore:
 
     def load_manifest(self):
         if os.path.exists(self.manifest_path):
-            with open(self.manifest_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # 新仕様（_meta入り）か、旧仕様（直下state）かを吸収する
-                if "_meta" in data and "state" in data:
-                    return data["state"]
-                return data
+            try:
+                with open(self.manifest_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                # @problem: マニフェストが手動編集やクラッシュで破損していると Traceback で即死していた
+                # @solution: 対処方法つきのエラーで安全に停止する。自動再生成はユーザーの履歴を壊すため行わない
+                #            「not found」という語は使わない（GUIの自動Init確認正規表現に誤マッチし、破損時に init を促してしまうため）
+                print(f"Fatal: .cut_manifest.json is corrupted or unreadable: {e}")
+                print("Hint: .acvs_history/ 内の最新スナップショットを .cut_manifest.json として復元するか、ファイルを削除して init し直してください。")
+                sys.exit(1)
+            # 新仕様（_meta入り）か、旧仕様（直下state）かを吸収する
+            if "_meta" in data and "state" in data:
+                return data["state"]
+            return data
         return {}
 
     def save_manifest(self, state):

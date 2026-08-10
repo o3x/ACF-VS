@@ -143,6 +143,18 @@ class CharacterizationTest(unittest.TestCase):
         # 履歴リスト項目の行頭 [YYYYMMDD_HHMMSS]（GUI のタイムスタンプ抽出元）
         self.assertRegex(log_result.stdout, r"(?m)^\[\d{8}_\d{6}\]")
 
+    def test_corrupt_manifest_actionable_error(self):
+        # マニフェスト破損時は Traceback で即死せず、対処ヒントつきのエラーで停止する（R3）
+        write_file(self.workdir, "a.txt", "corrupt_manifest 用の内容")
+        run_acvs(self.workdir, "init")
+        (Path(self.workdir) / ".cut_manifest.json").write_text("{broken", encoding="utf-8")
+        result = run_acvs(self.workdir, "status")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("corrupted", result.stdout)
+        self.assertIn("Hint:", result.stdout)
+        self.assertNotIn("Traceback", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_diff_with_target(self):
         write_file(self.workdir, "a.txt", "diff_with_target 用の内容")
         run_acvs(self.workdir, "init")
