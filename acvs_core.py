@@ -16,16 +16,16 @@ class ACVSCore:
     EXCLUDE_DIRS = {'.git', '.acvs_history', '__pycache__', 'test_env'}
     EXCLUDE_FILES = {'.gitignore', 'acvs_core.py', 'test_seq_generator.py'}
 
-    def __init__(self, target_dir):
+    def __init__(self, target_dir: str) -> None:
         self.target_dir = os.path.abspath(target_dir)
         self.manifest_path = os.path.join(self.target_dir, '.cut_manifest.json')
         self.history_dir = os.path.join(self.target_dir, '.acvs_history')
 
-    def _ensure_history_dir(self):
+    def _ensure_history_dir(self) -> None:
         if not os.path.exists(self.history_dir):
             os.makedirs(self.history_dir)
 
-    def calculate_hash(self, file_path, fast_mode=False):
+    def calculate_hash(self, file_path: str, fast_mode: bool = False) -> str | None:
         """ファイルのSHA-256ハッシュを計算する。速さ優先のfast_modeもサポート。"""
         if fast_mode:
             try:
@@ -43,7 +43,7 @@ class ACVSCore:
         except OSError:
             return None
 
-    def _hash_single(self, rel_path, file_path, fast_mode):
+    def _hash_single(self, rel_path: str, file_path: str, fast_mode: bool) -> tuple[str, dict] | None:
         """単一ファイルのハッシュとメタ情報を計算し (rel_path, アイテム辞書) を返す。読めない場合は None"""
         h = self.calculate_hash(file_path, fast_mode=fast_mode)
         if h:
@@ -51,7 +51,7 @@ class ACVSCore:
             return rel_path, {"hash": h, "mtime": st.st_mtime, "size": st.st_size, "is_archived": "(old)" in rel_path.lower(), "type": "file"}
         return None
 
-    def _collect_files(self, group_seq):
+    def _collect_files(self, group_seq: bool) -> tuple[list[tuple[str, str]], dict]:
         """os.walk で走査し、(通常ファイルリスト, 連番グループ辞書) を返す"""
         seq_groups = {} # src_dir -> { prefix: { ext: [files...] } }
         files_to_process = []
@@ -85,7 +85,7 @@ class ACVSCore:
 
         return files_to_process, seq_groups
 
-    def _hash_files(self, files_to_process, fast_mode):
+    def _hash_files(self, files_to_process: list[tuple[str, str]], fast_mode: bool) -> dict[str, dict]:
         """並列ハッシュ計算。PROGRESS 行の出力仕様（10件ごと＋最終件）はGUIが依存するため変更しないこと"""
         state = {}
         total_files = len(files_to_process)
@@ -104,7 +104,7 @@ class ACVSCore:
 
         return state
 
-    def _group_sequences(self, seq_groups, state, fast_mode):
+    def _group_sequences(self, seq_groups: dict, state: dict[str, dict], fast_mode: bool) -> None:
         """連番グループを state のエントリにする。2枚未満のグループは通常ファイルとして処理する"""
         for parent_dir, prefixes in seq_groups.items():
             for prefix, exts in prefixes.items():
@@ -133,7 +133,7 @@ class ACVSCore:
                             res = self._hash_single(item['rel_path'], item['path'], fast_mode)
                             if res: state[res[0]] = res[1]
 
-    def scan_directory(self, fast_mode=False, group_seq=False):
+    def scan_directory(self, fast_mode: bool = False, group_seq: bool = False) -> dict[str, dict]:
         """ディレクトリ以下を再帰的に走査し、現在の状態を取得する。"""
         files_to_process, seq_groups = self._collect_files(group_seq)
         state = self._hash_files(files_to_process, fast_mode)
@@ -141,7 +141,7 @@ class ACVSCore:
             self._group_sequences(seq_groups, state, fast_mode)
         return state
 
-    def compare_states(self, old_state, new_state):
+    def compare_states(self, old_state: dict[str, dict], new_state: dict[str, dict]) -> dict[str, list]:
         """古い状態と新しい状態を比較し、差分を判定する。"""
         changes = {
             "new": [],
@@ -220,7 +220,7 @@ class ACVSCore:
                 
         return changes
 
-    def print_changes(self, changes, no_change_message, duplicate_header):
+    def print_changes(self, changes: dict[str, list], no_change_message: str, duplicate_header: str) -> None:
         """差分判定結果を表示する。表示文字列はGUIとユーザーが依存するため変更禁止。"""
         has_changes = False
 
@@ -262,7 +262,7 @@ class ACVSCore:
         if not has_changes:
             print(no_change_message)
 
-    def load_manifest(self):
+    def load_manifest(self) -> dict[str, dict]:
         if os.path.exists(self.manifest_path):
             try:
                 with open(self.manifest_path, 'r', encoding='utf-8') as f:
@@ -280,7 +280,7 @@ class ACVSCore:
             return data
         return {}
 
-    def save_manifest(self, state):
+    def save_manifest(self, state: dict[str, dict]) -> None:
         # キー（ファイルパス）でソートして保存
         sorted_state = {k: state[k] for k in sorted(state.keys())}
         
@@ -296,7 +296,7 @@ class ACVSCore:
         with open(self.manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest_data, f, indent=4, ensure_ascii=False)
 
-    def init(self, fast_mode=False, group_seq=False):
+    def init(self, fast_mode: bool = False, group_seq: bool = False) -> bool:
         if os.path.exists(self.manifest_path):
             print("Already initialized.")
             return False
@@ -305,13 +305,13 @@ class ACVSCore:
         print(f"Initialized manifest with {len(state)} files.")
         return True
 
-    def scan(self, fast_mode=False, group_seq=False):
+    def scan(self, fast_mode: bool = False, group_seq: bool = False) -> tuple[dict[str, list], dict[str, dict]]:
         old_state = self.load_manifest()
         new_state = self.scan_directory(fast_mode=fast_mode, group_seq=group_seq)
         changes = self.compare_states(old_state, new_state)
         return changes, new_state
 
-    def status(self, fast_mode=False, group_seq=False):
+    def status(self, fast_mode: bool = False, group_seq: bool = False) -> None:
         if not os.path.exists(self.manifest_path):
             print("Fatal: Not an ACVS directory (or any of the parent directories): .cut_manifest.json not found")
             return
@@ -322,7 +322,7 @@ class ACVSCore:
             no_change_message="Nothing to commit, working tree clean",
             duplicate_header="Warning: Redundant copies detected:")
 
-    def commit(self, fast_mode=False, group_seq=False):
+    def commit(self, fast_mode: bool = False, group_seq: bool = False) -> None:
         if not os.path.exists(self.manifest_path):
             print("Fatal: Not an ACVS directory (or any of the parent directories): .cut_manifest.json not found")
             return
@@ -365,7 +365,7 @@ class ACVSCore:
         
         print(f"Manifest updated successfully. Backup saved to .acvs_history/{timestamp}.json")
 
-    def log(self):
+    def log(self) -> None:
         """履歴(History)の一覧を表示する"""
         if not os.path.exists(self.history_dir):
             print("No history found.")
@@ -394,7 +394,7 @@ class ACVSCore:
             except Exception as e:
                 print(f"Error reading {hf}: {e}")
 
-    def diff(self, target1=None, target2=None, fast_mode=False, group_seq=False):
+    def diff(self, target1: str | None = None, target2: str | None = None, fast_mode: bool = False, group_seq: bool = False) -> None:
         """指定した過去の日時の状態と現在の状態、または2つの過去の状態を比較して差分を表示する"""
         if not os.path.exists(self.history_dir) or not os.listdir(self.history_dir):
             if not target1 and not target2:
@@ -459,7 +459,7 @@ class ACVSCore:
             no_change_message="No changes compared to the specified state.",
             duplicate_header="Warning: Redundant copies detected in newer state:")
 
-def main():
+def main() -> None:
     # 強制的に標準出力をUTF-8にして、PowerShell側での文字化け（Mojibake）を防ぐ
     if sys.stdout.encoding.lower() != 'utf-8':
         try:
