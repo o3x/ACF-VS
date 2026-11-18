@@ -1,7 +1,7 @@
 # EXEC-REPORT: ACF-VS リファクタリング実行報告
 
 - 対象リポジトリ: `ACF-VS`
-- 計画書: `sakubou/handoff/to-bou/refactoring/plans/04_ACF-VS.md`
+- 計画書: 非公開の計画書に従った（このリポジトリには置かない）
 - 実行ブランチ: `refactor/2026-07`
 - 実行日: Mon Aug 10 21:54:03 JST 2026
 - 実行者: 望
@@ -37,4 +37,4 @@
 ## 大山さんへの確認事項
 
 - `acvs_gui.ps1`（GUI）は計画書の指示通り無変更。出力プロトコル（`PROGRESS:`・`Fatal: ...not found`・`Backup saved`・`Initialized`・タグ表記・行頭 `[YYYYMMDD_HHMMSS]`）は特性テストで固定した上で一字も変えていないため、GUIは動作するはずだが実機（Windows）での目視確認は未実施
-- マージ・push は絶対規則3により大山さんの承認後に望が実施する。現時点では `refactor/2026-07` ブランチにローカルコミットのみ
+- マージ・push は大山さんの承認後に実施する。現時点では `refactor/2026-07` ブランチにローカルコミットのみ（→ 2026-08-11 に承認を受け、master へ fast-forward マージ・push 済み）
